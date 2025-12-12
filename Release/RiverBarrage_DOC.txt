@@ -1,0 +1,158 @@
+RIVER BARRAGE
+
+LOADING:
+
+DISK: Insert disk into your floppy
+drive. Then on your C64 type in 
+LOAD "*",8 and then type in RUN.
+
+TAPE: Ensure correct position of 
+the tape. Insert into your C64's
+tape deck. Press SHIFT+RUN STOP
+press play on tape and then wait
+for the game to fast load and run.
+Loading is indicated by 
+loading stripes. If the 
+border turns red, stop tape, 
+rewind slightly then press play 
+on tape again. 
+
+A tape master disk has also been
+provided, should you wish to 
+make your own personal tape 
+version of the game.
+
+GAME INSTRUCTIONS 
+
+This is a game for 1 or 2 players.
+
+Player 1 controls agent 1, in a white 
+boat. The boat is armed with a long 
+distance rifle which can only fire 
+forward.
+
+Player 2 controls agent 2, in a yellow
+boat. The boat is armed with a missile
+launcher, which can fire directional.
+
+A terrorist ring leader has captured a 
+National Park, and has sent his hench 
+people to drop mines into the river.
+He is plotting to destroy a dam which 
+is there to protect neighbouring 
+villages from being flooded. What used 
+to be a large beautiful natural 
+tourist attraction has been transformed
+into a deadly war zone. Sightings of 
+the leader has been spotted inside a 
+blue plane - heading towards the dam.
+He must be stopped!
+
+Your mission is to guide your boat 
+through the National Park and find the 
+terrorist ring leader's plane. You will
+not be alone because you will have to 
+fight his hench army with your own 
+firepower. The enemy forces are based
+on ground, air and water. Some enemies 
+will require more than one hit before 
+they are destroyed. Some other enemies 
+will target your boat before engaging
+fire. 
+
+During your travel, you will encounter
+various obstacles. Some of which must 
+be avoided, and others which can be 
+shot. These include mines. Floating 
+mines can be shot, the underwater mines
+dropped by grey military boats cannot 
+be shot. You should avoid running your 
+boat onto the mines, otherwise a life
+will be lost. Other deadly obstacles, 
+which can be shot include bridges and 
+hungry crocodiles. Mind you, we would 
+not want one of those reptiles to 
+clamber on board your boat do we?
+
+Rescue swimmers who are stuck in the 
+water. For every swimmer rescued, you 
+will be awarded 1,000 points. 
+
+Pick up life rings for 2,000 points. 
+The higher the score.
+
+Extra lives are awarded for every 
+10,000 points reached. Unless of 
+course, you already have 9 lives in the 
+lives counter.
+
+Can you help save the dam (and its 
+neighbouring villages) from being 
+destroyed before it is too late?
+
+Good luck agents! 
+
+CONTROLS:
+
+Use joystick in either port.
+
+Run/Stop: Pause game 
+Q (While paused): Abort game and go 
+back to the title screen.
+
+
+BONUS CONTENT:
+
+Runnable executable of raw SEUCK
+version of the game created from
+SEUCK Left Scroll by Martin 
+Piper. (On disk/D64 only)
+
+SEUCK Left Scroll ALL DATA file
+for loading from SEUCK LEFT 
+SCROLL by Martin Piper 
+(On disk/D64 only)
+
+Use POKE 17651,25 after running
+the SEUCK Left Scroll.
+
+(Use a search engine to find 
+SEUCK LEFT SCROLL)
+
+
+CREDITS:
+
+Design, graphics, concept and 
+sound effects by
+
+Alf Yngve and Richard Bayliss using the
+Sideways Scrolling SEUCK - (Right to 
+Left version by Martin Piper).
+
+SEUCK Redux Framework by 
+
+Martin Piper
+
+Additional programming and music by 
+
+Richard Bayliss 
+
+Loading bitmap by 
+
+Alf Yngve
+
+(C)2024 The New Dimension
+
+https://richard-tnd.itch.io 
+http://tnd64.unikat.sk
+
+This game was created as a little fun
+hobby to pass time. It was created 
+exclusively for Zzap! 64 Micro 
+Action Magazine's digital covermount
+and was later on released on 11th 
+August 2024 with some bonus content.
+
+You are welcome to copy and share this 
+production providing it is free. 
+

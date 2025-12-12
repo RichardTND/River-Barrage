@@ -1,0 +1,147 @@
+* When using Scroller_DebugColourScrollTimings and Tusari2 with its extra rendered lines and in NTSC mode especially (but also PAL)
+	For ScrollColour_40 and other directions, note when in the screen the colourise happens, for the top edge especially and also the top right/left edge
+	Really going to have to increase the top chunk and also look at positioning the top (also right/left) colourise better. Inbetween the top/bottom update would be ideal
+		This would mean the left/right colourise would need to be split
+	>> This would all be negated if there was a single colourise pass from top to bottom
+		The only complication would be the character based weapons, unless their colours were included in the colour table. This would mean that weapons chars would not have completely controllable colours...
+			Unless they were stored in the colour table...
+		Note: Scroller_AdditionalCharLines and Scroller_AdditionalCharLinesBankAdjust
+
+
+
+
+
+* Nothing is calling CharEffects_Init ?
+
+
+
+
+* Use 2 MHz mode where possible?
+	At $d012 = $ff
+		lda $d030
+		ora #1
+		sta $d030
+	At $d012 = 50
+		lda $d030
+		and #$fe
+		sta $d030
+
+
+
+
+* Depending on the MSB move the sprite positions to offscreen
+	Is there better logic here? For example shift the MSB, then rotate into the hi bit?
+	Or use Y to store zero in one pass?
+
+
+
+
+* For Multiplexor_UpdateCollisionDetails and other related hardware collision code
+	"!ifdef Scroller_MultiDirection { } else {" should not be used, instead "ScrollEntry_*.a" should have a specific define to enable hardware collision code so it can be used in other projects.
+	* Study Multiplex_LogCollisions usage
+
+
+
+
+* Option of playing soundFX/music from interrupt instead of mainline. This will mean that any SFX play request will need to be queued and executed inside the interrupt.
+	* Added Scroller_DoMusicUpdateInIRQ - The test works well, no music slowdown as expected
+	Still need a way to queue sound effect play requests into the IRQ. Basically when Scroller_DoMusicUpdateInIRQ is defined then MusicPlayerPlaySFX and MusicPlayerPlay can be redirected.
+	Perhaps MusicPlayerPlaySFX can be a small routine that takes the sound effect number, increments it by 1, then stores it in a suitable small 3 entry buffer.
+	Then MusicPlayerPlay takes the small 3 entry buffer, any non-zero value is then decremented and used.
+	* Observation: Due to the timing of MusicPlayerPlay in the IRQ, after the panelIRQDone is flagged, then it should be rare that MusicPlayerPlaySFX is called inside the MusicPlayerPlay IRQ anyway. So is it needed?
+		Instead perhaps make MusicPlayerPlaySFX a little bit more IRQ aware and robust?
+
+
+
+
+* With Scroller_RunJumpDemo_RunJumpTest
+	Override the player jumps, and instead directly input long scroll requests in a "hexagon" shape (r,dr,d,dl,l,ul,u,ur...), to make it easier to trigger the scroll mitigation code
+
+
+
+* Consider having an option to unroll ScrollerAnimation.a:AnimationUpdateMultiplexor, create Scroller_EnableUpdateMultiplexorSpeedCode, to remove all indexing
+	Also ScrollerAnimation.a:AnimationUpdateMultiplexorPre
+	Also Scroller.a:UpdateSprites
+	It would even be possible to have dedicated speed code for each variation of scrollerRealMovementXPixels and scrollerRealMovementYPixels
+	* Adding a AnimationSpriteType would mean unallocated sprites can be skipped instead of testing AnimationYPos with $ff
+
+
+
+
+
+* For Screen splits, especially the score panel split:
+	Calculate what sprites will be active on the target line and the expected y scroll and produce optimised routines for each combination
+	* Lees important now since the split now forces all sprites to be enabled on the scan line giving a stable split.
+		Due to sprite DMA triggering delaying the CPU until the correct point.
+
+
+
+
+* Tidy use of !for with (.x-1) etc inside Scroll_*.a with !set/!do
+
+
+
+* Make the bat files generic so they can be used by other projects using this framework
+
+
+
+* Think about block data swizzling. Perhaps it's more optimal to have block data stored in different patterns?
+	Especially for the different register requirements during the horizontal/vertical strip screen plots
+	; Optimise the block plot and screen scroll loops. Unroll more.
+
+
+
+; MPi: TODO: If the sort is already after the multiplexor end (and the sprite collision is off) then just do the full copy and sort without buffering.
+
+
+
+* The screen scroll and especially colour scroll should be split into two sections, the top half is before the multiplexor sort after the screen split, the second half is after the multiplexor sort.
+
+
+
+
+; Aimed fire improvement by taking into account any scroll speed, player movement and distance, then aim for that spot.
+
+
+
+; MPi: TODO: Add horizontally/vertically scrolling demo for platform game controller with standard gravity and velocity.
+
+
+; MPi: TODO: For smoothed enemy movement. When an enemy is spawned calculate its entire delta movement every frame with a smoothing target based algorithm. Like the old style camera movement algorithms from long time ago.
+;	It needs to be delta movement per frame so it can take into account any scrolling movement of course.
+;	delta = (targetPos - currentPos) * 0.9 (or some suitable close fraction that is easily calculated in binary using div/mul 2)
+
+
+; MPi: TODO: Double check directional and directional hold fire bullet animations from moving and stationary enemies that are either directional, directional hold or sequenced animations.
+; Check moving and bullet speed 0 stationary bullets.
+; Write tests. Satisfy the tests.
+; It seems as though a bullet speed of zero results in incorrect animation direction calculation due to:
+;	jsr AnimationConvertXYToDirection
+;	ldx tempWork7
+;	sta AnimationDirectionIn,x
+; Solution: If the input direction is set by the player, i.e. it isn't random, then use the direction instead of calculating it.
+
+
+
+; MPi: TODO: Push scroller, when the player death animation is playing it's possible to push scroll the screen with the joystick.
+; Maybe only when the players are linked?
+
+
+
+; MPi: TODO: Double check the sprite X and Y placement in normal SEUCK and horizontal SEUCK.
+; See Scroller_SpriteXAdjust and Scroller_NoSpriteYAdjust
+; Check final placement of enemies with scrolling levels that scroll to static screens and also
+; just the static screens. Check push scroll as well.
+; In the horizontal SEUCK games there is a chance the sprites are appearing one pixel offset from
+; where they should be.
+; I have a theory the problem is with the original SEUCK code where the sprites can lag one frame
+; position behind a scroll. This does mean that there is no easy fix since while scrolling people
+; might have placed their sprites to compensate for this one frame lag. In this case just make
+; sure the sprite position is correct when the screen is static or stops scrolling (like that 
+; scroll after a push scroll).
+
+
+
+* SEUCK: When using Multiplex_CollisionIndexes, the table should be approximately sorted, so there is an early out if the Y extent of the boxes do not overlap then there is no point in testing any further.
+	The overlap can be to within 21 or 42 pixels?
+

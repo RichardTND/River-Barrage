@@ -1,0 +1,84 @@
+MarkCommonCode = *
+; A place for common stuff.
+
+!source "ScrollerCommon_Tables.a"
+
+!ifdef IRQOpenBorders {
+; Copy what is at the top of the bank 3 screen to the other pretend screens in bank 0 so the
+; VIC gets the correct character data for the top of the screen fetch.
+!zn
+ScrollerOpenBorderCopyBank0
+	ldx #39
+.more
+	lda $c800,x
+	sta $0800,x
+	dex
+	bpl .more
+	rts
+
+!zn
+ScrollerOpenBorderCopyBank1
+	ldx #39
+.more
+	lda $cc00,x
+	sta $0c00,x
+	dex
+	bpl .more
+	rts
+}
+
+!zn
+ScrollerUpdateTopIRQ
+	; Update screen scrolling from what the frame data says
+!ifdef Scroller_MultiDirection {
+	lda frameScrollX
+	sta topScreenScrollX
+	lda frameScrollY
+	sta topScreenScrollY
+
+	; Create some inverted values for code to use later on
+	lda #7
+	sec
+	sbc topScreenScrollX
+	sta topScreenScrollXInv
+	lda #7
+	sec
+	sbc topScreenScrollY
+	sta topScreenScrollYInv
+} else {
+	lda frameScrollPos
+;	lda #6	; Debug: Force the bad line code to be used no matter what the scroll should be
+;	lda #2	; Debug: Force a non-bad line to be used no matter what the scroll should be
+;	lda #4	; Debug: Force a non-bad line in the bottom open border area to be used no matter what the scroll should be
+	sta topScreenScrollPos
+}
+
+!ifdef Scroller_EnableUpdateTopIRQHook {
+	; Note: Use +MCheckNotInMemoryRange_C64Cartridge_Lo_8K for that code
+	jsr ScrollerUpdateTopIRQHook
+}
+
+	rts
+
+
+
+!zn
+ScrollerBankVisible		!by $c8
+ScrollerBankBackBuffer	!by $cc
+
+ScrollerFlipBank
+	; Do this first since the colour scroll can take some time
+	lda topScreenBank
+	eor #1
+ScrollerSetBank
+	sta topScreenBank
+	tax
+
+	lda BankToScreenAddrNext,x
+	sta ScrollerBankBackBuffer
+
+	lda BankToScreenAddr,x
+	sta ScrollerBankVisible
+	ora #3	; Create the $cb or $cf addresses
+	jsr Multiplex_SetSpritePointer
+	rts

@@ -1,0 +1,961 @@
+MarkBeginData = *
+
+!ifdef Scroller_UseDemoScorePanel {
+; The first few characters for the score panel, increase as needed
+ScorePanelNumChars = 32
+ScorePanelChars
+!bin "ScorePanel.ctm" , (ScorePanelNumChars * 8) , $14
+
+ScorePanelColourLookup
+!bin "ScorePanel.ctm" , ScorePanelNumChars , $814
+
+; For some reason ctm files store char byte then another byte...
+ScorePanelCharData
+!bin "ScorePanel.ctm" , 40*5 ,  $914 , 2
+
+ScorePanelBGCol0
+!bin "ScorePanel.ctm" , 1 , 4
+ScorePanelBGCol1
+!bin "ScorePanel.ctm" , 1 , 5
+ScorePanelBGCol2
+!bin "ScorePanel.ctm" , 1 , 6
+}
+
+!ifdef Scroller_MultiDirection {
+
+!align 255,0
+
+MaxSpriteNumber = 191
+SpriteEmptyLookupTab		!fill 256 , 0
+!ifdef SpriteEmptyLookupTab2Enable {
+SpriteEmptyLookupTab2		!fill 256 , 0
+}
+
+BackgroundFixedColours
+;!by $9, $f ,$c
+;!by 14, 12 ,9
+!by 0 , $f , $9
+
+!source "ScrollerAnimationMemory.a"
+
+!align 255,0
+BlockColours
+;!bin "../FreeDirRant/level4.blk",$80
+!ifdef BlockColoursForEveryCharacter {
+; This needs BlockColoursForEveryCharacter = 1 to be defined in ScrollEntry.a
+!bin "../FreeDirRant/attribs.raw"
+}
+
+; This needs CharColoursForEveryCharacter = 1 to be defined in ScrollEntry.a
+numMapUsedChars = 194
+;numMapUsedChars = 162
+
+!ifndef BlockColoursForEveryCharacter {
+CharColours
+!bin "../ExternalTools/CharPad 2.0 310715/Examples (CTM5)/Examples - Rips/Turrican 2 - 4x4/Turrican 2 L2-2.ctm" , numMapUsedChars , $14 + (numMapUsedChars * 8)
+;!bin "../Tusari2/Level1-2.ctm" , numMapUsedChars , $10 + (numMapUsedChars * 8) + 2
+}
+
+!align 255,0
+BlockData
+;!bin "../FreeDirRant/level4.blk",,$80
+!ifdef BlockColoursForEveryCharacter {
+!bin "../FreeDirRant/tiles.raw"
+}
+numMapUsedTiles = 172
+;numMapUsedTiles = 72
+!ifndef BlockColoursForEveryCharacter {
+!bin "../ExternalTools/CharPad 2.0 310715/Examples (CTM5)/Examples - Rips/Turrican 2 - 4x4/Turrican 2 L2-2.ctm" , numMapUsedTiles*4*4 , $14 + (numMapUsedChars * 8) + numMapUsedChars , 2
+;!bin "../Tusari2/Level1-2.ctm" , numMapUsedTiles*4*4 , $10 + (numMapUsedChars * 8) + 2 + numMapUsedChars + 6 , 2
+}
+
+
+;!align 255,0
+; First two bytes = width,height
+MapData
+;!bin "../FreeDirRant/level4.map"
+!ifdef BlockColoursForEveryCharacter {
+!by 137,51
+!bin "../FreeDirRant/map.raw"
+}
+!ifndef BlockColoursForEveryCharacter {
+!by 170
+!by 48
+!bin "../ExternalTools/CharPad 2.0 310715/Examples (CTM5)/Examples - Rips/Turrican 2 - 4x4/Turrican 2 L2-2.ctm" , 170*48 , $14 + (numMapUsedChars * 8) + numMapUsedChars + (numMapUsedTiles*4*4*2) , 2
+
+;!by 170
+;!by 31
+; Assume block names are 9 bytes long for "Untitled\0"
+;!bin "../Tusari2/Level1-2.ctm" , 170*31 , $10 + (numMapUsedChars * 8) + 2 + numMapUsedChars + 6 + (numMapUsedTiles*4*4*2) + 2 + numMapUsedTiles + 2 + (numMapUsedTiles*9) + 6 , 2
+}
+MapDataEnd
+
+
+} else {
+; Include some demonstration SEUCK data instead
+; The SEUCK data files are in VICE file format which means they have $1a bytes of extra file
+; header information, then there are 2 bytes of load address and the real memory start address
+; is meant to be $900, hence each !bin command uses offsets starting with "$1a + 2 - $900", the
+; last offset is therefore a memory address for the particular part of SEUCK memory.
+
+
+!ifdef Paralax_Enable {
+!align 255,0
+;This includes duplicate columns of paralax chars, it makes the speed code much faster since it doesn't have to do a wraparound check
+Paralax_Level1CharData
+!for .xpos,Paralax_Width {
++SEUCKFileDataParalaxBlock Paralax_Height*8, $f800 + ((Paralax_CharLevel1+((.xpos-1)*Paralax_Height))*8)
++SEUCKFileDataParalaxBlock Paralax_Height*8, $f800 + ((Paralax_CharLevel1+((.xpos-1)*Paralax_Height))*8)
+}
+; This mask data is processed by ScrollerDemoInitOneTimeData to create a logical mask
+!ifdef Paralax_MaskEnable {
+Paralax_Level1CharDataMask
+!for .xpos,Paralax_Width {
++SEUCKFileDataParalaxBlock Paralax_Height*8, $f800 + ((Paralax_CharLevel1+((.xpos-1)*Paralax_Height))*8)
++SEUCKFileDataParalaxBlock Paralax_Height*8, $f800 + ((Paralax_CharLevel1+((.xpos-1)*Paralax_Height))*8)
+}
+}
+
+Paralax_Level2CharData
+!for .xpos,Paralax_Width {
++SEUCKFileDataParalaxBlock Paralax_Height*8, $f800 + ((Paralax_CharLevel2+((.xpos-1)*Paralax_Height))*8)
++SEUCKFileDataParalaxBlock Paralax_Height*8, $f800 + ((Paralax_CharLevel2+((.xpos-1)*Paralax_Height))*8)
+}
+}
+
+!align 255,0
+BlockColours
++SEUCKFileData $80, $1900
+
+!align 255,0
+BlockData
++SEUCKFileData $c80, $1a00
+
+;!align 255,0
+; This map is 8 blocks wide so it equals $200 (512) blocks high
+MapData
++SEUCKFileData $1000, $900
+MapDataEnd
+
+;$4085,86,87 = VIC2ScreenColour, VIC2ExtraBackgroundColour1, VIC2ExtraBackgroundColour2
+BackgroundFixedColours
++SEUCKFileData 3, $4085
+
+SpriteFixedColours
++SEUCKFileData 1, $4081
++SEUCKFileData 1, $4083
+}
+
+; Adding different music player support is as simple as:
+; 1) Include whatever music file you want instead of the placeholder "your custom music file.prg". Remember by default the music player starts at $8000
+; 2) Define labels for MusicPlayerInit and MusicPlayerPlay that point to the other music routine's entry points.
+; 3) Define MusicPlayerPlaySFX if you're playing sound effects with the music player when Scroller_PlaySoundMusicAndSoundEffectsDuringGame is used.
+
+; There is some spare space here for code and data growth
+
+;Insert the sprite panel decoration sprites 
+SpritePanelData !bin "c64/panelsprites.bin"
+;Insert the sprite panel charset 
+PanelCharMem !bin "c64/panelfont.bin"
+;Render a new score panel for the game
+PanelFont = PanelCharMem
+Digit0 = PanelFont
+Digit1 = PanelFont+1*8
+Digit2 = PanelFont+2*8
+Digit3 = PanelFont+3*8
+Digit4 = PanelFont+4*8
+Digit5 = PanelFont+5*8
+Digit6 = PanelFont+6*8
+Digit7 = PanelFont+7*8
+Digit8 = PanelFont+8*8
+Digit9 = PanelFont+9*8
+Rocket = PanelFont+10*8
+Colon = PanelFont+11*8
+
+RenderNewScorePanel                                   
+                           
+                        ldy #$00
+;Score rendering ....                        
+                        ldx ScorePlayer1,y  ;Digit 1
+                        lda FontMemLow,x
+                        sta scfont1a+1
+                        lda FontMemHi,x
+                        sta scfont1a+2
+                        iny
+                       
+                        ldx ScorePlayer1,y  ;Digit 2
+                        lda FontMemLow,x
+                        sta scfont1b+1
+                        lda FontMemHi,x
+                        sta scfont1b+2
+                        iny
+                       
+                        ldx ScorePlayer1,y  ;Digit 3
+                        lda FontMemLow,x
+                        sta scfont1c+1
+                        lda FontMemHi,x
+                        sta scfont1c+2
+                        iny
+                       
+                        ldx ScorePlayer1,y  ;Digit 4
+                        lda FontMemLow,x
+                        sta scfont1d+1
+                        lda FontMemHi,x
+                        sta scfont1d+2
+                        iny
+                       
+                        ldx ScorePlayer1,y  ;Digit 5
+                        lda FontMemLow,x
+                        sta scfont1e+1
+                        lda FontMemHi,x
+                        sta scfont1e+2
+                        iny
+                       
+                        ldx ScorePlayer1,y  ;Digit 6
+                        lda FontMemLow,x
+                        sta scfont1f+1
+                        lda FontMemHi,x
+                        sta scfont1f+2
+                        ;iny
+               ;-----------------------------------------
+                        ldy #0
+                        ldx ScorePlayer2,y  ;Digit 1
+                        lda FontMemLow,x
+                        sta scfont2a+1
+                        lda FontMemHi,x
+                        sta scfont2a+2
+                        iny
+                        ldx ScorePlayer2,y ;Digit 2
+                        lda FontMemLow,x
+                        sta scfont2b+1
+                        lda FontMemHi,x
+                        sta scfont2b+2
+                        iny
+                        ldx ScorePlayer2,y  ;Digit 3
+                        lda FontMemLow,x
+                        sta scfont2c+1
+                        lda FontMemHi,x
+                        sta scfont2c+2
+                        iny
+                        ldx ScorePlayer2,y  ;Digit 4
+                        lda FontMemLow,x
+                        sta scfont2d+1
+                        lda FontMemHi,x
+                        sta scfont2d+2
+                        iny
+                        ldx ScorePlayer2,y  ;Digit 5
+                        lda FontMemLow,x
+                        sta scfont2e+1
+                        lda FontMemHi,x
+                        sta scfont2e+2
+                        iny
+                        ldx ScorePlayer2,y  ;Digit 6
+                        lda FontMemLow,x
+                        sta scfont2f+1
+                        lda FontMemHi,x
+                        sta scfont2f+2
+                        ldy #0
+                        ldx Player1Information+PlayerGameOffset_Lives,y
+                        cpx #$ff
+                        beq NoLivesPlayer1
+                        cpx #$09
+                        bcc SkipLives1
+                        ldx #$09
+                        jmp SkipLives1
+                        jmp SkipLives1
+NoLivesPlayer1            ldx #$00                       
+SkipLives1                                       
+                        lda FontMemLow,x
+                        sta lvfont1+1
+                        lda FontMemHi,x
+                        sta lvfont1+2
+                        ldy #0
+                        ldx Player2Information+PlayerGameOffset_Lives,y
+                        cpx #$ff
+                        beq NoLivesPlayer2
+                        cpx #$09 ;Higher than 9 lives
+                        bcc SkipLives2
+                        ldx #$09
+                        jmp SkipLives2
+NoLivesPlayer2          ldx #$00
+SkipLives2                       
+                        lda FontMemLow,x
+                        sta lvfont2+1
+                        lda FontMemHi,x
+                        sta lvfont2+2
+                       
+                       
+                       
+;-----------------------------------------
+
+CopyFontToSprite        ldx #$00
+                        ldy #$00
+renderscoreandlivesloop                       
+;Rendering score panel for player 1                       
+                       
+scfont1a                lda PanelCharMem,x
+                        sta $0900,y
+scfont1b                lda PanelCharMem,x
+                        sta $0901,y
+scfont1c                lda PanelCharMem,x
+                        sta $0902,y
+scfont1d                lda PanelCharMem,x
+                        sta $0940,y
+scfont1e                lda PanelCharMem,x
+                        sta $0941,y
+scfont1f                lda PanelCharMem,x
+                        sta $0942,y
+                      
+;Rendering score panel for player 2
+                     
+scfont2a                lda PanelCharMem,x
+                        sta $0980,y
+scfont2b                lda PanelCharMem,x
+                        sta $0981,y
+scfont2c                lda PanelCharMem,x
+                        sta $0982,y
+scfont2d                lda PanelCharMem,x
+                        sta $09c0,y
+scfont2e                lda PanelCharMem,x
+                        sta $09c1,y
+scfont2f                lda PanelCharMem,x
+                        sta $09c2,y
+                       
+;Rendering lives for player 1
+
+;FIRST CHAR = SKULL
+
+skullcharPlayer1        lda PanelFont+(10*8),x
+                        sta $0961,y
+                        sta $09e1,y
+                       
+                        lda PanelFont+(11*8),x
+                        sta $0962,y
+                        sta $09e2,y
+lvfont1                 lda PanelFont,x
+                        sta $0963,y
+lvfont2                 lda PanelFont,x
+                        sta $09e3,y
+                      
+;------------------------------------------                       
+ 
+                        iny
+                        iny
+                        iny
+                        inx
+                        cpx #8
+                        bne renderscoreandlivesloop
+                        rts
+                       
+                        !byte <Digit0
+FontMemLow              !byte <Digit0,<Digit1,<Digit2,<Digit3,<Digit4
+                        !byte <Digit5,<Digit6,<Digit7,<Digit8,<Digit9
+                        !byte >Digit0
+FontMemHi               !byte >Digit0,>Digit1,>Digit2,>Digit3,>Digit4                       
+                        !byte >Digit5,>Digit6,>Digit7,>Digit8,>Digit9             
+
+
+!ifdef Scroller_NoMusic {} else {
+; Include demonstration music from the Element 114 music editor
+*=$8000
+
+; Music players do not have to start at $8000 but it helps use this part of memory before the
+; graphics at $c000-$ffff
+
+; Replace this !bin to include whatever music player you want
+; This file was exported with "Include sound effect code" option selected.
+!ifdef Scroller_RunJumpDemo {
+!bin "MusicAndSFX_TusariLevel1.prg",,2
+} else {
+!bin "c64/music.prg",,$2	; Remember to skip any lo/hi file information by using $2
+}
+
+
+; Define these to point the entry points of the included music routine.
+MusicPlayerInit = $8000
+MusicPlayerPlay = $8003
+MusicPlayerPlaySFX = $8009
+}
+   !align $ff,$00
+;Text data 
+   
+            !ct scr 
+CreditsText 
+         ;  !text "0123456789012345678901234567890123456789"    
+            !text "        a game for 1 or 2 players       " ;1
+            !text "                                        " ;2
+            !text "       (c) 2024 the new dimension       "
+            !text "                                        " ;4
+            !text "   design,  graphics and sound fx by    " ;5
+            !text "     alf yngve and richard bayliss      " ;7
+            !text "                                        " ;8
+            !text "         front end and music by         "
+            !text "            richard bayliss             " ;10
+            !text "                                        " ;11
+            !text "         - press fire to start -        " ;12
+            !text "                                        "
+
+HiScoreText1
+            !text "        hall of fame - player 1         "  ;1
+            !text "                                        " ;2
+            !text "          01. "
+p1name1     !text "secret    "
+p1hiscore1  !text "055000          " ;3
+            !text "          02. "
+p1name2     !text "agents    " 
+p1hiscore2  !text "044000          " ;4
+            !text "          03. "
+p1name3     !text "alf       " 
+p1hiscore3  !text "033000          " ;5
+            !text "          04. "
+p1name4     !text "and       "
+p1hiscore4  !text "022000          " ;6
+            !text "          05. "
+p1name5     !text "richard   "
+p1hiscore5  !text "011000          " ;7
+            !text "          06. "
+p1name6     !text "take      "
+p1hiscore6  !text "009900          " ;8
+            !text "          07. "
+p1name7     !text "on        "
+p1hiscore7  !text "008800          " ;9
+            !text "          08. "
+p1name8     !text "another   "
+p1hiscore8  !text "007700          " ;10 
+            !text "          09. "
+p1name9     !text "mission   "
+p1hiscore9  !text "006600          " ;11
+            !text "          10. "
+p1name10    !text "for you   "
+p1hiscore10 !text "005500          " ;12 
+            
+HiScoreText2
+            !text "        hall of fame - player 2         "  ;1
+            !text "                                        " ;2
+            !text "          01. "
+p2name1     !text "this      "
+p2hiscore1  !text "055000          " ;3
+            !text "          02. "
+p2name2     !text "message   "
+p2hiscore2  !text "044000          " ;4
+            !text "          03. "
+p2name3     !text "is        "
+p2hiscore3  !text "033000          " ;5            
+            !text "          04. "
+p2name4     !text "top       "
+p2hiscore4  !text "022000          " ;6
+            !text "          05. "
+p2name5     !text "secret    "
+p2hiscore5  !text "011000          " ;7
+            !text "          06. "
+p2name6     !text "and       "
+p2hiscore6  !text "009900          " ;8
+            !text "          07. "
+p2name7     !text "it        "
+p2hiscore7  !text "008800          " ;9
+            !text "          08. "
+p2name8     !text "will      "
+p2hiscore8  !text "007700          " ;10 
+            !text "          09. "
+p2name9     !text "self      "
+p2hiscore9  !text "006600          " ;11
+            !text "          10. "
+p2name10    !text "destruct  "
+p2hiscore10 !text "005500          " ;12 
+
+GetReadyText
+            !text "            g e t  r e a d y            " 
+GameOverText 
+            !text "            g a m e   o v e r           "            
+WellDoneText 
+            !text "     c o n g r a t u l a t i o n s      " 
+            !text "                                        "          
+            !text "you have saved the dam and stopped the  "
+            !text "terrorist menace. the villagers are no  "
+            !text "longer threatened by flooding.          "
+            !text "                                        "
+            !text "but wait! the terrorist leader jumped   "
+            !text "from his plane and is trying to swim    "
+            !text "away! the crocodiles are surrounding him"                                  
+            !text "and they look hungry... the terrorist   "
+            !text "leader is going to be a tasty meal for  "
+            !text "the crocs. yum yum!                     "                                        
+                       
+
+!ifdef Scroller_MultiDirection { } else {
+
+; SEUCK addresses
+; break 429f for game frame updates
+
+; Enemy attack wave data
+; Seems to actually be $340c-$3fcf
+; Appears to be two stacks growing from the start and the end of memory.
+; $3fcc/3fcd = lo/hi of the end of the start memory i.e. This pointer grows upwards through memory
+; $3fce/3fcf = lo/hi of the start of the end memory. i.e. This pointer grows downwards through memory
+; From the start:
+; 7 bytes per enemy
+; 0-1	- Map pos. Pixels = Bits 0-2 then char rows using the remaining bits from both bytes
+; e.g. Block 1 = char row 5 = $28 = 5 * 8 = 40
+; 2-3	- lo/hi address of offset movement data. e.g. $3fcb
+; 4		- x pos div 2 from the screen pos used
+; 5		- y pos
+; 6		- Enemy animation number
+; Or ff ff (as the position) signals the end of attack waves
+
+; From the end the movement data stream is stored in reverse order such that the initial pointer
+; counts backwards until the data reaches an $ff.
+; A static enemy of one frame
+; 10 ff
+; A static enemy of many frames
+; f0 f0 f0 f0 10 ff
+; An enemy just moving to the right for many frames
+; 10 f1 f1 b1 ff
+; An enemy just moving to the left for many frames
+; 10 f2 f2 22 ff
+; An enemy just moving down for many frames
+; 10 f4 f4 64 ff
+; An enemy just moving up for many frames
+; 10 f8 f8 78 ff
+; An enemy just moving up-left for many frames
+; 10 fa 7a ff
+; An enemy just moving up-right for many frames
+; 10 f9 59 ff
+; An enemy just moving down-right for many frames
+; 10 f5 f5 ff
+; An enemy just moving down-left for many frames
+; 10 f6 f6 ff
+; Therefore the data seems to be
+; lo nybble	- Direction bits 0 right, 1 left, 2 down, 3 up
+; hi nybble	- For number of frames.
+; Until $ff is encountered
+
+AttackWaves
++SEUCKFileData $bc0, $340c
+
+; 36 Enemy properties
+; $00		- Lo nybble - Bullet sound effect - 0 is no sound
+; $00		- Hi nybble - Explosion sound effect - 0 is no sound
+; $01		- Lo nybble - Fire type
+;	0 = None
+;	1 = Up
+;	2 = Up right
+;	3 = Right
+;	4 = Down right
+;	5 = Down
+;	6 = Down left
+;	7 = Left
+;	8 = Left up
+;	9 = +
+;	a = x
+;	b = Random
+;	c = Directional
+; $01		- Hi nybble - Hits to kill 0-15 (0 is never used)
+; $02		- Fire rate
+; $03		- Bit 0 - Enemy to ship - Enemy die
+; $03		- Bit 1 - Enemy to ship - Ship die
+; $03		- Bit 2 - Enemy to bullet - Enemy die
+; $03		- Bit 3 - Enemy to bullet - Bullet die
+; $03		- Bits 4-5 - Movement speed 0-3 (0 is never used)
+; $03		- Bits 6-7 - Bullet speed 0-3
+; $04		- Lo nybble - Explosion type
+; $04		- Hi nybble - Bullet type
+; $06		- Points divided by ten
+; Enemy speed. Pixels per second.
+; Enemy bullet speed. Pixels per second.
+!ifdef Scroller_LOTD {
+; An extra five animations for the spell effects
+ObjectPropertiesTabLo !for .table1,36+5 {!by <(ObjectProperties + (.table1-1) * $7) }
+ObjectPropertiesTabHi !for .table1,36+5 {!by >(ObjectProperties + (.table1-1) * $7) }
+} else {
+ObjectPropertiesTabLo !for .table1,36 {!by <(ObjectProperties + (.table1-1) * $7) }
+ObjectPropertiesTabHi !for .table1,36 {!by >(ObjectProperties + (.table1-1) * $7) }
+}
+; These properties only exist for enemies so remember to subtract AnimationType_Enemy1 before indexing from the type
+ObjectProperties
++SEUCKFileData 36 * 7, $3108
+
+Player1Properties
++SEUCKFileData $13, $409d
+
+Player2Properties
++SEUCKFileData $13, $40b0
+PlayerOffset_LeftStopLo = 0
+PlayerOffset_LeftStopHi = 1
+PlayerOffset_UpStop = 2
+PlayerOffset_RightStopLo = 3
+PlayerOffset_RightStopHi = 4
+PlayerOffset_DownStop = 5
+PlayerOffset_StartXPosLo = 6
+PlayerOffset_StartXPosHi = 7
+PlayerOffset_StartYPos = 8
+PlayerOffset_Speed = 9
+PlayerOffset_NumBullets = $a
+PlayerOffset_Directional = $b
+PlayerOffset_BulletSpeed = $c
+PlayerOffset_BulletDuration = $d
+PlayerOffset_DieOrStop = $e
+PlayerOffset_CharacterCollision = $f
+PlayerOffset_Lives = $10
+PlayerOffset_ExtraLife = $11
+PlayerOffset_Enabled = $12
+
+
+
+
+; Each level property is 7 bytes long
+; $00/$01	- Lo/hi of start block in the map
+; $02/$03	- Lo/hi of end block in the map
+; $04		- Static count
+; $05		- Scroll type and speed
+;			- Bit 0 - Speed 1/2
+;			- Bit 6/7 - %00 = Still
+;			- Bit 6/7 - %10 = Scroll
+;			- Bit 6/7 - %11 = Push
+; $06		- End of level
+; $06		- $00 = Redraw
+; $06		- $ff = Loop
+; $06		- $80 = Continue
+LevelProperties
++SEUCKFileData $9a, $b776
+
+
+!ifdef Scroller_PlaySoundEffectsDuringGame {
+SFXTable
++SEUCKFileData $f0, $b810
+}
+
+}
+
+MarkEndData = *
+
+
+!ifdef Scroller_MultiDirection {
+; VIC Graphics data
+*=$c000
+CharData
+;!bin "../FreeDirRant/level4.chr",,$100
+!ifdef BlockColoursForEveryCharacter {
+!bin "../FreeDirRant/chars.raw"
+}
+!ifndef BlockColoursForEveryCharacter {
+!bin "../ExternalTools/CharPad 2.0 310715/Examples (CTM5)/Examples - Rips/Turrican 2 - 4x4/Turrican 2 L2-2.ctm" , numMapUsedChars * 8 , $14
+;!bin "../Tusari2/Level1-2.ctm" , numMapUsedChars * 8 , $10
+}
+
+!ifdef Scroller_RunJumpDemo {
+*=$d000
+SpriteData
+!bin "C:\CCS64\MyOldE114Software\TusariDevTusari\SPRS.PRG",,2
+!align 63,0
+!bin "C:\CCS64\MyOldE114Software\TusariDevTusari\SPRS2.PRG",$e00,2
+SpriteDataEnd
+}
+
+!ifndef Scroller_RunJumpDemo {
+*=$fe00
+SpriteData
+!by 255,255,255,255,255,255,255,255
+!by 255,255,255,255,255,255,255,255
+!by 255,255,255,255,255,255,255,255
+!by 255,255,255,255,255,255,255,255
+!by 255,255,255,255,255,255,255,255
+!by 255,255,255,255,255,255,255,255
+!by 255,255,255,255,255,255,255,255
+!by 255,255,255,255,255,255,255,255
+
++SpriteLine %........................
++SpriteLine %.#......................
++SpriteLine %.##.....................
++SpriteLine %.###....................
++SpriteLine %.####...................
++SpriteLine %.#####..................
++SpriteLine %.######.................
++SpriteLine %.#######................
++SpriteLine %.########...............
++SpriteLine %.#########..............
++SpriteLine %.########...............
++SpriteLine %.######.................
++SpriteLine %.######.................
++SpriteLine %.##..##.................
++SpriteLine %.#....##................
++SpriteLine %......##................
++SpriteLine %.......##...............
++SpriteLine %.......##...............
++SpriteLine %........##..............
++SpriteLine %........##..............
++SpriteLine %........................
+!byte 0
+
++SpriteLine %########################
++SpriteLine %########################
++SpriteLine %###..................###
++SpriteLine %###..................###
++SpriteLine %###..................###
++SpriteLine %###..................###
++SpriteLine %###..................###
++SpriteLine %###..................###
++SpriteLine %###.......###........###
++SpriteLine %###......#####.......###
++SpriteLine %###......#####.......###
++SpriteLine %###......#####.......###
++SpriteLine %###.......###........###
++SpriteLine %###..................###
++SpriteLine %###..................###
++SpriteLine %###..................###
++SpriteLine %###..................###
++SpriteLine %###..................###
++SpriteLine %###..................###
++SpriteLine %########################
++SpriteLine %########################
+!byte 0
+
++SpriteLine %########################
++SpriteLine %########################
++SpriteLine %####.......##.......####
++SpriteLine %###.#......##......#.###
++SpriteLine %###..#.....##.....#..###
++SpriteLine %###...#....##....#...###
++SpriteLine %###....#...##...#....###
++SpriteLine %###.....#..##..#.....###
++SpriteLine %###......######......###
++SpriteLine %###......#####.......###
++SpriteLine %########################
++SpriteLine %###......#####.......###
++SpriteLine %###......#####.......###
++SpriteLine %###.....#..#..#......###
++SpriteLine %###....#...#...#.....###
++SpriteLine %###...#....#....#....###
++SpriteLine %###..#.....#.....#...###
++SpriteLine %###.#......#......#..###
++SpriteLine %####.......#.......#.###
++SpriteLine %########################
++SpriteLine %########################
+!byte 0
+}
+
+} else {
+; $00 - $11	- Frames - If the hi bit is set then it is the end of the animation and it should loop.
+; $12		- Animation speed
+; $13		- Lo nybble - Colour
+;			- Hi nybble - %0001 - Directional
+;			- Hi nybble - %0010 - Directional hold
+!ifdef Scroller_LOTD {
+; An extra five animations
+ObjectAnimationsTabLo !for .table1,58+5 {!by <(ObjectAnimations + (.table1-1) * $14) }
+ObjectAnimationsTabHi !for .table1,58+5 {!by >(ObjectAnimations + (.table1-1) * $14) }
+} else {
+ObjectAnimationsTabLo !for .table1,58 {!by <(ObjectAnimations + (.table1-1) * $14) }
+ObjectAnimationsTabHi !for .table1,58 {!by >(ObjectAnimations + (.table1-1) * $14) }
+}
+ObjectAnimations
++SEUCKFileData $488, $2c80
+!ifdef Scroller_LOTD {
+; Include the extra animations
+; Fireball trail
++SEUCKFileData2 $14, $2c80 + (6*$14)
+; Wind trail
++SEUCKFileData2 $14, $2c80 + (7*$14)
+; Wind
++SEUCKFileData2 $14, $2c80 + (22*$14)
+; Fireball1
++SEUCKFileData2 $14, $2c80 + (23*$14)
+; Fireball2
++SEUCKFileData2 $14, $2c80 + (24*$14)
+}
+
+; Include some demonstration SEUCK data instead
+; The title screen chars and screen itself are copied to bank 0 $400-$fff by DisplayTitleScreen
+; each time the title screen is displayed. During the game $400-$fff is used by other VIC data.
+TitleScreenChars
++SEUCKFileData $208, $3204
+
+TitleScreenCharData
+!bin "c64/titlefont.bin"
+logomatrix
+!bin "c64/logomatrix.bin"
+
+RasterColourTable
++SEUCKFileData $40, $41c1
+RasterColourTableType
++SEUCKFileData 1, $409c
+
+!ifdef TitleScreen_AnimatingSprites {
+TitleScreenBallSprites
+!bin "ArmalyteBalls.bin",$200,0
+}
+
+; ScorePlayer1Render assumes aligned data
+!align 255,0
+SpriteScoreChars
++SEUCKFileData $a8, $f508
+; One unit of blank data following the player life graphic used by ScorePlayer1Render
+!fill 8,0
+
+
+; Put any other data to be loaded in here.
+
+
+; Data after this point is later used by data tables etc.
+; The game tables that are initialised after the code starts.
+!set StartOfTableMemory = *
+
+!macro reserve ~.address, .amount {
+	.address = StartOfTableMemory
+	!set StartOfTableMemory = StartOfTableMemory + .amount
+}
+
+!macro alignToBoundary {
+	!set StartOfTableMemory = (StartOfTableMemory+255) & $ff00
+}
+
+
+; Used to tell if a sprite has anything in it at all. Useful for collision detection.
+; Gets initialised when the sprites are moved up into memory.
++alignToBoundary
++reserve ~SpriteEmptyLookupTab , 256
+!ifdef SpriteEmptyLookupTab2Enable {
++reserve ~SpriteEmptyLookupTab2 , 256
+}
+!ifndef defined_Multiplex_YPos {
++reserve ~Multiplex_YPos , Multiplex_items
+}
+!ifndef defined_Multiplex_XPosLo {
++reserve ~Multiplex_XPosLo , Multiplex_items
+}
+!ifndef defined_Multiplex_XPosHi {
++reserve ~Multiplex_XPosHi , Multiplex_items
+}
+!ifndef defined_Multiplex_Colour {
++reserve ~Multiplex_Colour , Multiplex_items
+}
+!ifndef defined_Multiplex_SpriteFrame {
++reserve ~Multiplex_SpriteFrame , Multiplex_items
+}
+!ifndef defined_Multiplex_Sortlo {
++reserve ~Multiplex_Sortlo , Multiplex_items
+}
+!ifndef defined_Multiplex_Sorthi {
++reserve ~Multiplex_Sorthi , Multiplex_items
+}
+
+; Moved these tables for the animation engine
++reserve ~AnimationType , Multiplex_items
++reserve ~AnimationXPosLo , Multiplex_items
++reserve ~AnimationXPosHi , Multiplex_items
++reserve ~AnimationYPos , Multiplex_items
+!ifdef Multiplex_SplitSort {
++reserve ~AnimationYPosToSort , Multiplex_items
+}
++reserve ~AnimationSpriteColour , Multiplex_items
++reserve ~AnimationSpriteFrame , Multiplex_items
++reserve ~AnimationSpriteFrameCount , Multiplex_items
++reserve ~AnimationSpriteFrameCountDelay , Multiplex_items
++reserve ~AnimationSpriteFrameCountDelayInit , Multiplex_items
++reserve ~AnimationSpriteIsNew , Multiplex_items
+
+; For directional animations
++reserve ~Animation_DirectionalBits , Multiplex_items
+; Uses the same directional bit pattern as the attack wave movement
+; Direction bits 0 right, 1 left, 2 down, 3 up
+EnemyAnimationBit_Right = %0001
+EnemyAnimationBit_Left	= %0010
+EnemyAnimationBit_Down	= %0100
+EnemyAnimationBit_Up	= %1000
++reserve ~AnimationDirectionIn , Multiplex_items
++reserve ~AnimationDirectionLastValidIn , Multiplex_items
+
+; Pointer to the animation frame table for the animation type
++reserve ~AnimationAnimsLo , Multiplex_items
++reserve ~AnimationAnimsHi , Multiplex_items
+
+; These only become valid for objects 22-57 (Enemy 1-36)
++reserve ~AnimationMovementAddrLo , Multiplex_items
++reserve ~AnimationMovementAddrHi , Multiplex_items
+!ifdef Scroller_LinkedEnemyTest {
++reserve ~AnimationMovementOrigLo , Multiplex_items
++reserve ~AnimationMovementOrigHi , Multiplex_items
+}
++reserve ~AnimationMovementFrameCount , Multiplex_items
+; The current byte read in
++reserve ~AnimationMovementMove , Multiplex_items
++reserve ~AnimationMoveSpeed , Multiplex_items
++reserve ~AnimationFireSpeed , Multiplex_items
++reserve ~AnimationExplosionType , Multiplex_items
++reserve ~AnimationFireType , Multiplex_items
++reserve ~AnimationFireDirectionType , Multiplex_items
++reserve ~AnimationFireRateCount , Multiplex_items
++reserve ~AnimationFireRateInit , Multiplex_items
++reserve ~AnimationHealth , Multiplex_items
++reserve ~AnimationCollisionLogic , Multiplex_items
++reserve ~AnimationFireSFX , Multiplex_items
++reserve ~AnimationExplosionSFX , Multiplex_items
++reserve ~AnimationPoints , Multiplex_items
+; These are valid for objects 6-13, 1 and 4. Bullet types.
++reserve ~AnimationBulletSpeedX , Multiplex_items
++reserve ~AnimationBulletSpeedY , Multiplex_items
+
+; These are only valid for player bullet types
++reserve ~AnimationBulletDuration , Multiplex_items
+
++reserve ~Multiplex_CollisionCounter		, 1
++reserve ~Multiplex_CollisionHistory		, 8
++reserve ~Multiplex_CollisionIndexes		, (Multiplex_items-8)*8
++reserve ~Multiplex_CollisionCounterLastFrame		, 1
++reserve ~Multiplex_CollisionIndexesLastFrame		, (Multiplex_items-8)*8
+
+
+; Moved these calculated tables to here
++alignToBoundary
++reserve ~MapTabL , 256
++reserve ~MapTabH , 256
+
+
+; A marker for the end of memory so we can check it doesn't interfere with VIC2 data in bank3
+EndOfTableMemory = StartOfTableMemory
+
+!if EndOfTableMemory >= $c000 {
+!error "EndOfTableMemory is into bank 3. Too many tables?!"
+}
+
+; Lastly, high up in memory goes the sprite data
+*=$c000
+CharData
++SEUCKFileData $7f8, $f800
+
+*=$d000
+SpriteData
++SEUCKFileData $1fc0, $c000
+!ifdef Scroller_LOTD {
+MaxSpriteNumber = 126+12
++SEUCKFileData2 (12*64), $c000
+} else {
+MaxSpriteNumber = 126
+}
+
+}
+
+TitleScreenIRQNew
+!source "NewIRQsetup.asm"
+!source "hiscoreroutine.asm"
+OptionSpriteData 
+!bin "c64/optionsprites.bin"
+
+!ct scr 
+scrolltext  !text "    ... - river barrage - ...   "
+            !text "game design, graphics and sound effects by alf yngve and richard bayliss"
+            !text " ...   additional code by martin piper and richard bayliss ...   loading bitmap "
+            !text "by alf yngve ...   music composed by richard bayliss ...   "
+            !text "(c) 2024 alf yngve and the new dimension ...    use left/right on joystick in any port to select in game "
+            !text "sound options then press fire to play ...   player 1 controls agent 1 in a white boat using a joystick in port 2 ...   "
+            !text "player 2 controls agent 2 in a yellow boat using a joystick in port 1 ...   mission briefing: there are sightings of a terrorist ring leader "
+            !text "capturing a national park and he threatens to flood a village near it by planting mines around it ...   "
+            !text "what used to be a large beautiful national park has now been transformed "
+            !text "into a war zone ...   now he is heading towards the dam in his getaway plane ...   your mission is to guide your boats through the national park, locate the ring leader, and "
+            !text "destroy his getaway plane ...   during your mission, you will encounter his military forces based on ground, air "
+            !text "and water ...   some enemies will require more than one hit before they are destroyed ...   some enemies will "
+            !text "aim at your boat and engage firing ...   shoot floating water mines, underwater ones cannot be shot and are best avoided ...   rescue innocent people before they become "
+            !text "croc bait ...   blast unpassable bridges ...   extra lives are awarded for every 10,000 points, unless of course "
+            !text "the max no. of lives reached is 9 ...   please help and stop the terrorist from plotting to destroy our village before "                                
+            !text "it results to devastating consequences ...   good luck agents! ...                                      "
+             !byte 0
+

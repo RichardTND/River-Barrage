@@ -1,0 +1,161 @@
+; Sound effects player with music entry points.
+
+!zn
+SFXSIDInit
+	; Init the music player when the game level starts
+	lda #0
+	jsr MusicPlayerInit
+
+	jsr SFXReset
+
+	rts
+
+!zn
+; Input: A = SFX Type
+.SFXCurrentVoice !by 1
+.xTemp !by 0
+.yTemp !by 0
+
+.voiceUsed	!by 0 , 0 , 0
+.priority !by 0
+.note !by 0
+.voiceTry !by 2
+
+SFXInit
+	stx .xTemp
+	sty .yTemp
+
+	; Try up to this many times to find a channel
+SFX_Voices=*+1
+	ldx #2
+	beq .exit
+	stx .voiceTry
+
+	; Lookup the sound effect to play.
+	tax
+	lda SEUCKToMusicPriority,x
+	sta .priority
+
+	ldy SEUCKToMusicSFX,x
+	; And the note
+	lda SEUCKToMusicSFXNote,x
+	sta .note
+
+	; Calculate the next sound channel to use into x
+.check1
+	inc .SFXCurrentVoice
+	ldx .SFXCurrentVoice
+	; For example comparing with 3 gives two voices for sound effects, one for music
+
+SFX_VoiceUpperWrap=*+1
+	cpx #3
+	bne .o1
+
+SFX_VoiceLowerReset=*+1
+	ldx #1
+	stx .SFXCurrentVoice
+
+.o1
+	lda .priority
+	cmp .voiceUsed,x
+	bcs .okPlay
+	dec .voiceTry
+	bne .check1
+
+	jmp .exit
+
+.okPlay
+	sta .voiceUsed,x
+
+	; A = Note
+	; X = Channel
+	; Y = Envelope
+!ifdef Scroller_DoMusicUpdateInIRQ {
+	; Unlock the storage from the IRQ
+	lda #0
+	sta SFXPlaySent,x
+	lda .note
+	sta SFXPlaySentA,x
+	tya
+	sta SFXPlaySentY,x
+	; Signal the storage to the IRQ
+	inc SFXPlaySent,x
+} else {
+	lda .note
+	jsr MusicPlayerPlaySFX
+}
+
+.exit
+	ldx .xTemp
+	ldy .yTemp
+	rts
+
+; Entry:
+; A = Misic track to play
+SFXInitMusic
+!ifdef Scroller_DoMusicUpdateInIRQ {
+	sta SFXWantMusicSentA
+	inc SFXWantMusicSent
+} else {
+	jsr MusicPlayerInit
+}
+	rts
+
+!ifdef Scroller_DoMusicUpdateInIRQ {
+SFXPlaySent		!by 0 , 0 , 0
+SFXPlaySentA	!by 0 , 0 , 0
+SFXPlaySentY	!by 0 , 0 , 0
+
+SFXWantMusicSent	!by 0
+SFXWantMusicSentA	!by 0
+}
+SFXPlay
+	ldx #2
+.l1
+	lda .voiceUsed,x
+	beq .l2
+	dec .voiceUsed,x
+.l2
+	dex
+	bpl .l1
+
+!ifdef Scroller_DoMusicUpdateInIRQ {
+!for .ii , 3 {
+!set .i = .ii - 1
+	lda SFXPlaySent + .i
+	beq +
+	lda SFXPlaySentA + .i
+	ldx #.i
+	ldy SFXPlaySentY + .i
+	jsr MusicPlayerPlaySFX
+	lda #0
+	sta SFXPlaySent + .i
++
+}
+	lda SFXWantMusicSent
+	beq .noMusicRequest
+	lda SFXWantMusicSentA
+	jsr MusicPlayerInit
+	lda #0
+	sta SFXWantMusicSent
+.noMusicRequest
+}
+
+	jsr MusicPlayerPlay
+	rts
+
+
+SFXReset
+	lda #0
+	sta .voiceUsed
+	sta .voiceUsed+1
+	sta .voiceUsed+2
+
+!ifdef Scroller_DoMusicUpdateInIRQ {
+	lda #0
+	sta SFXPlaySent
+	sta SFXPlaySent + 1
+	sta SFXPlaySent + 2
+	sta SFXWantMusicSent
+}
+	rts

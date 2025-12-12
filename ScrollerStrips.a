@@ -1,0 +1,119 @@
+;*****************************************************************************
+;*****************************************************************************
+; Hotizontal strips
+;*****************************************************************************
+;*****************************************************************************
+
+!zn {
+ScrollerDrawStripTopBank0
+!ifdef Scroller_DebugScreenScrollTimings {
+	lda #VIC2Colour_Blue
+	sta VIC2BorderColour
+}
+	+MACROScrollerDrawHStrip $c800, scrollMapLX , scrollMapHX, scrollMapLY , scrollMapHY , BlockTabL , BlockTabH
+}
+
+!zn {
+ScrollerDrawStripTopBank1
+!ifdef Scroller_DebugScreenScrollTimings {
+	lda #VIC2Colour_Blue
+	sta VIC2BorderColour
+}
+	+MACROScrollerDrawHStrip $cc00, scrollMapLX , scrollMapHX, scrollMapLY , scrollMapHY , BlockTabL , BlockTabH
+}
+
+
+
+!zn {
+.lscrollMapLY !by 0
+.lscrollMapHY !by 0
+ScrollerDrawStripBottomBank0
+!ifdef Scroller_DebugScreenScrollTimings {
+	lda #VIC2Colour_Blue
+	sta VIC2BorderColour
+}
+	+MACROScrollerBottomAdjust .lscrollMapLY, .lscrollMapHY
+!ifdef Scroller_FullScreen {
+	+MACROScrollerDrawHStrip $cbc0, scrollMapLX , scrollMapHX, .lscrollMapLY , .lscrollMapHY , BlockTabL , BlockTabH
+} else {
+	+MACROScrollerDrawHStrip $caf8, scrollMapLX , scrollMapHX, .lscrollMapLY , .lscrollMapHY , BlockTabL , BlockTabH
+}
+}
+
+!zn {
+.lscrollMapLY !by 0
+.lscrollMapHY !by 0
+ScrollerDrawStripBottomBank1
+!ifdef Scroller_DebugScreenScrollTimings {
+	lda #VIC2Colour_Blue
+	sta VIC2BorderColour
+}
+	+MACROScrollerBottomAdjust .lscrollMapLY, .lscrollMapHY
+!ifdef Scroller_FullScreen {
+	+MACROScrollerDrawHStrip $cfc0, scrollMapLX , scrollMapHX, .lscrollMapLY , .lscrollMapHY , BlockTabL , BlockTabH
+} else {
+	+MACROScrollerDrawHStrip $cef8, scrollMapLX , scrollMapHX, .lscrollMapLY , .lscrollMapHY , BlockTabL , BlockTabH
+}
+
+}
+
+
+
+
+
+
+;*****************************************************************************
+;*****************************************************************************
+; Vertical strips
+;*****************************************************************************
+;*****************************************************************************
+
+!zn {
+ScrollerDrawStripLeftBank0
+	lda #0
+	sta tempWork0
+	lda #$c8
+	sta tempWork1
+ScrollerDrawStripLeftCommon
+!ifdef Scroller_DebugScreenScrollTimings {
+	lda #VIC2Colour_Blue
+	sta VIC2BorderColour
+}
+	+MACROScrollerDrawVStrip scrollMapLX , scrollMapHX, scrollMapLY , scrollMapHY , BlockTabL , BlockTabH
+}
+
+!zn {
+ScrollerDrawStripLeftBank1
+	lda #0
+	sta tempWork0
+	lda #$cc
+	sta tempWork1
+	jmp ScrollerDrawStripLeftCommon
+}
+
+
+
+!zn {
+.lscrollMapLX !by 0
+.lscrollMapHX !by 0
+ScrollerDrawStripRightBank0
+	lda #$27
+	sta tempWork0
+	lda #$c8
+	sta tempWork1
+ScrollerDrawStripRightCommon
+!ifdef Scroller_DebugScreenScrollTimings {
+	lda #VIC2Colour_Blue
+	sta VIC2BorderColour
+}
+	+MACROScrollerRightAdjust .lscrollMapLX, .lscrollMapHX
+	+MACROScrollerDrawVStrip .lscrollMapLX , .lscrollMapHX, scrollMapLY , scrollMapHY , BlockTabL , BlockTabH
+
+ScrollerDrawStripRightBank1
+	lda #$27
+	sta tempWork0
+	lda #$cc
+	sta tempWork1
+	jmp ScrollerDrawStripRightCommon
+}
+

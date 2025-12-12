@@ -1,0 +1,23 @@
+; Demonstrates 8-way scrolling with 4x4 blocks, static score panel and sprite multiplexing
+; Also demonstrates SEUCK data file compatibility.
+!to "Scroller.prg", cbm
+!sal
+!sl "Scroller.map"
+!svl "Scroller.lbl"
+!pdb "Scroller.pdb"
+!cpu 6510
+!ct pet
+!initmem $02	; JAM opcode
+;!initmem %10101010
+
+; Note: Sprite expansion options must be configured before including stdlib.a
+; Enable this enable X expanded sprites in game
+;Global_SpriteExpandX = 1
+; Enable this enable Y expanded sprites in game
+;Global_SpriteExpandY = 1
+
+!source "../stdlib/stdlib.a"
+
+; After this, one of the source includes for the main build options is used by BuildIt.bat
+; --- Main build options start ---
+

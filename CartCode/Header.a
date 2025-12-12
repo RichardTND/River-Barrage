@@ -1,0 +1,6 @@
+!cpu 6510
+!sl "bin/cart.map"
+
+!source "../stdlib/stdlib.a"
+!source "CartOpts.a"
+!source "ScreenConfig.a"

@@ -1,0 +1,41 @@
+; Note for the macros "SEUCKFileData*" the ".offset" is changed to work with mostly SEUCK "all data" files saved as P00 files, which have a $1a byte header plus 2 bytes for the start address, and offset by $900
+; If your data file is different, for example it's a full memory dump, then the ".offset" will need different adjustment.
+
+!macro SEUCKFileData .size, .offset {
+!set .offset = $1a + 2 - $900 + .offset
+
+; River Barrage Horizontal SEUCK files
+ !bin "c64/barragev13.p00",.size,.offset
+
+
+;Needs Multiplex_MaintainPriority Multiplex_ReverseOrder Scroller_IsHorizontal Scroller_LinkedPlayers Scroller_LinkedPlayersOffsetX = 0 Scroller_LinkedPlayersOffsetY = -21 Scroller_SetSpriteBackgroundPriority
+;!bin "../SEUCK/STREETS_I.P00",.size,.offset
+
+;Needs Multiplex_MaintainPriority Multiplex_ReverseOrder Scroller_IsHorizontal Scroller_SetSpriteBackgroundPriority Scroller_SingleScoreLives WackyWaste
+;Disable TryOtherPlayerSafePositionForRespawn
+;!bin "../SEUCK/WACKYV3I.P00",.size,.offset
+
+
+; Needs Global_SpriteExpandX and Global_SpriteExpandY to be set
+;!bin "../SEUCK/gigaseuck.p00",.size,.offset
+; Just needs Global_SpriteExpandY
+;!bin "../SEUCK/zapfight3work1.p00",.size,.offset
+}
+
+
+
+; This macro includes the LotD extra data
+!macro SEUCKFileData2 .size, .offset {
+!set .offset = $1a + 2 - $900 + .offset
+!bin "../SEUCK/LTDSPLLS.P00",.size,.offset
+}
+
+
+
+; This uses only the characters from the block data in PRLXBLCK.P00 saved from ParalaxTestBlocksOnly.vsf
+!ifdef Paralax_Enable {
+!macro SEUCKFileDataParalaxBlock .size, .offset {
+!set .offset = $1a + 2 - $900 + .offset
+!bin "../SEUCK/PRLXBLCK.P00",.size,.offset
+}
+}

@@ -1,0 +1,13 @@
+; Adds extra lines to the screen scroll
+!ifndef Scroller_AdditionalCharLines {
+Scroller_AdditionalCharLines = 0
+}
+; Adds extra lines to the top screen scroll code. Useful if the colour scroll is sometimes late, for _39 _40 _ 41 scroll directions.
+!ifndef Scroller_AdditionalCharLinesBankAdjust {
+Scroller_AdditionalCharLinesBankAdjust = 0
+}
+
+
+!ifdef Scroller_NTSC {
+Multiplex_TopScreenIRQRaster = 16
+}

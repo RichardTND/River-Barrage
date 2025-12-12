@@ -1,0 +1,550 @@
+!ifdef CharEffects_CoordinateShiftX {
+!if CharEffects_CoordinateShiftX < 1 {
+!error "CharEffects_CoordinateShiftX must be >= 1"
+}
+!if CharEffects_CoordinateShiftX > 1 {
+!error "CharEffects_CoordinateShiftX must be <= 1"
+}
+}
+!ifdef CharEffects_CoordinateShiftY {
+!if CharEffects_CoordinateShiftY < 1 {
+!error "CharEffects_CoordinateShiftY must be >= 1"
+}
+!if CharEffects_CoordinateShiftY > 1 {
+!error "CharEffects_CoordinateShiftY must be <= 1"
+}
+}
+!zn
+!ifndef kNumCharEffects {
+kNumCharEffects = 12
+}
+
+CharEffectsX		!fill kNumCharEffects , 0
+!ifdef CharEffects_CoordinateShiftX {
+CharEffectsUsedX		!fill kNumCharEffects , 0
+}
+; Negative Y indicates no character effect active
+CharEffectsY		!fill kNumCharEffects , -1
+CharEffectsTime		!fill kNumCharEffects , 0
+CharEffectsCol		!fill kNumCharEffects , 0
+CharEffectsChar		!fill kNumCharEffects , 0
+
+CharEffectsXVel		!fill kNumCharEffects , 0
+CharEffectsYVel		!fill kNumCharEffects , 0
+
+; The colour and char to put back
+CharEffectsBkCol	!fill kNumCharEffects , 0
+CharEffectsBkChar	!fill kNumCharEffects , 0
+
+; These are updated from the y pos when the characters are drawn
+CharEffectsScrL	!fill kNumCharEffects , 0
+; Negative value indicates the bullet slot is empty, not drawn
+CharEffectsScrH	!fill kNumCharEffects , -1
+
+
+
+!zn
+CharEffects_Init
+	ldx #kNumCharEffects-1
+	lda #-1
+.l1
+	sta CharEffectsX,x
+	sta CharEffectsY,x
+	sta CharEffectsTime,x
+	sta CharEffectsScrL,x
+	sta CharEffectsScrH,x
+	dex
+	bpl .l1
+
+!ifdef CharEffects_HiddenIndexLookupEnabled {
+!ifdef CharEffects_HiddenIndexLookup {
+!if (CharEffects_HiddenIndexLookup & 0x3ff) != 0 {
+	!error "CharEffects_HiddenIndexLookup must use: !align $3ff,0	; Because of ora #>CharEffects_HiddenIndexLookup"
+}
+}
+	ldx #0
+.l2
+	sta CharEffects_HiddenIndexLookup,x
+	sta CharEffects_HiddenIndexLookup+$100,x
+	sta CharEffects_HiddenIndexLookup+$200,x
+	sta CharEffects_HiddenIndexLookup+$2e8,x
+	dex
+	bne .l2
+}
+
+
+	rts
+
+!zn
+; Finds a free character effect slot and X contains the index with carry clear. If no index is free then carry is set.
+; Exit
+; A		Updated
+; X		Updated
+; Y		Preserved
+; CS	No slot
+; CC	Slot found, index in X
+AllocateCharacterEffect
+	ldx #kNumCharEffects-1
+.l1
+	lda CharEffectsY,x
+	bmi .o1
+
+	dex
+	bpl .l1
+
+	; Debug
+;	inc VIC2BorderColour
+
+	sec
+	rts
+	
+.o1
+	; Free slot!
+	lda #-1
+	sta CharEffectsScrH,x
+	clc
+	rts
+
+!macro MCharEffects_BeforeScrollersSpeedCode .i {
+	lda CharEffectsScrH + .i
+	bmi .o1
+	sta tempWork1
+	lda CharEffectsScrL + .i
+	sta tempWork2
+
+!ifdef CharEffects_CoordinateShiftX {
+	ldy CharEffectsUsedX + .i
+} else {
+	ldy CharEffectsX + .i
+}
+
+!ifdef CharEffects_HiddenIndexLookupEnabled {
+	; Clear hidden index screen
+	lda tempWork1
+	ora #>CharEffects_HiddenIndexLookup
+	sta tempWork3
+	lda #-1
+	sta (tempWork2),y
+}
+
+	lda tempWork1
+	ora tempWork0
+	sta tempWork3
+	lda CharEffectsBkChar + .i
+	sta (tempWork2),y
+
+	lda tempWork1
+	ora #>COLOURRAM
+	sta tempWork3
+	lda CharEffectsBkCol + .i
+	sta (tempWork2),y
+.o1
+}
+!zn
+; Restore screen data before characters movement
+BeforeScrollers
+!ifdef CharEffects_DebugBorder {
+	lda #VIC2Colour_Red
+	sta VIC2BorderColour
+}
+
+	lda ScrollerBankVisible
+	sta tempWork0
+
+!ifdef CharEffects_EnableBeforeScrollersSpeedCode {
+
+!for .ii , kNumCharEffects {
+	+MCharEffects_BeforeScrollersSpeedCode .ii - 1
+}
+} else {
+
+	ldx #kNumCharEffects-1
+.l1
+
+	lda CharEffectsScrH,x
+	bmi .o1
+	sta tempWork1
+	lda CharEffectsScrL,x
+	sta tempWork2
+
+!ifdef CharEffects_CoordinateShiftX {
+	ldy CharEffectsUsedX,x
+} else {
+	ldy CharEffectsX,x
+}
+
+!ifdef CharEffects_HiddenIndexLookupEnabled {
+	; Clear hidden index screen
+	lda tempWork1
+	ora #>CharEffects_HiddenIndexLookup
+	sta tempWork3
+	lda #-1
+	sta (tempWork2),y
+}
+
+	lda tempWork1
+	ora tempWork0
+	sta tempWork3
+	lda CharEffectsBkChar,x
+	sta (tempWork2),y
+
+	lda tempWork1
+	ora #>COLOURRAM
+	sta tempWork3
+	lda CharEffectsBkCol,x
+	sta (tempWork2),y
+
+.o1
+	dex
+	bpl .l1
+}
+
+!ifdef CharEffects_DebugBorder {
+	lda #VIC2Colour_Black
+	sta VIC2BorderColour
+}
+
+	rts
+
+!macro MCharEffects_AfterScrollersSpeedCode .i {
+	lda CharEffectsY + .i
+	bmi .o1
+
+	dec CharEffectsTime + .i
+	bmi .offScreen
+
+	clc
+!ifdef CharEffects_CoordinateShiftY {
+!if CharEffects_CoordinateShiftY = 1 {
+	adc CharEffects_preCalcScrollerScreenCharMovedY
+}
+} else {
+	adc ScrollerScreenCharMovedY
+}
+	clc
+	adc CharEffectsYVel + .i
+!ifdef CharEffects_CoordinateShiftY {
+!if CharEffects_CoordinateShiftY = 1 {
+	cmp #(20 + Scroller_AdditionalCharLines)*2
+}
+} else {
+	cmp #20 + Scroller_AdditionalCharLines
+}
+	bcs .offScreen
+	sta CharEffectsY + .i
+
+	lda CharEffectsX + .i
+	clc
+!ifdef CharEffects_CoordinateShiftX {
+!if CharEffects_CoordinateShiftX = 1 {
+	adc CharEffects_preCalcScrollerScreenCharMovedX
+}
+} else {
+	adc ScrollerScreenCharMovedX
+}
+
+	clc
+	adc CharEffectsXVel + .i
+!ifdef CharEffects_CoordinateShiftX {
+!if CharEffects_CoordinateShiftX = 1 {
+	cmp #40*2
+}
+} else {
+	cmp #40
+}
+	bcs .offScreen
+	sta CharEffectsX + .i
+
+!ifdef CharEffects_CoordinateShiftY {
+	lda CharEffectsY + .i
+!if CharEffects_CoordinateShiftY = 1 {
+	lsr
+}
+	tay
+} else {
+	ldy CharEffectsY + .i
+}
+	lda ScreenTabH,y
+	sta CharEffectsScrH + .i
+	sta tempWork1
+	lda ScreenTabL,y
+	sta CharEffectsScrL + .i
+	sta tempWork2
+
+!ifdef CharEffects_CoordinateShiftX {
+	lda CharEffectsX + .i
+!if CharEffects_CoordinateShiftX = 1 {
+	lsr
+}
+	tay
+	sta CharEffectsUsedX + .i
+} else {
+	ldy CharEffectsX + .i
+}
+	lda tempWork1
+	ora tempWork0
+	sta tempWork3
+	lda (tempWork2),y
+	cmp #MapSolidCharsUpper
+	bcs .offScreen
+	sta CharEffectsBkChar + .i
+
+	lda tempWork1
+	ora #>COLOURRAM
+	sta tempWork3
+	lda (tempWork2),y
+	sta CharEffectsBkCol + .i
+	jmp .o1
+.offScreen
+	lda #-1
+	sta CharEffectsY + .i
+	sta CharEffectsScrH + .i
+.o1
+}
+
+
+!macro MCharEffects_AfterScrollersSpeedCode2 .i {
+	lda CharEffectsY + .i
+	bmi .o2
+
+	lda CharEffectsScrH + .i
+	sta tempWork1
+	lda CharEffectsScrL + .i
+	sta tempWork2
+
+!ifdef CharEffects_CoordinateShiftX {
+	ldy CharEffectsUsedX + .i
+} else {
+	ldy CharEffectsX + .i
+}
+
+	lda tempWork1
+	ora tempWork0
+	sta tempWork3
+
+	lda CharEffectsChar + .i
+	sta (tempWork2),y
+
+	lda tempWork1
+	ora #>COLOURRAM
+	sta tempWork3
+	lda CharEffectsCol + .i
+	sta (tempWork2),y
+
+!ifdef CharEffects_HiddenIndexLookupEnabled {
+	; Store char effect index
+	lda tempWork1
+	ora #>CharEffects_HiddenIndexLookup
+	sta tempWork3
+	txa
+	sta (tempWork2),y
+}
+
+.o2
+}
+
+!zn
+!ifndef CharEffects_EnableAfterScrollersSpeedCode {	
+.offScreen
+	lda #-1
+	sta CharEffectsY,x
+	sta CharEffectsScrH,x
+	jmp .o1
+}
+
+!ifdef CharEffects_CoordinateShiftX {
+CharEffects_preCalcScrollerScreenCharMovedX !by 0
+}
+!ifdef CharEffects_CoordinateShiftY {
+CharEffects_preCalcScrollerScreenCharMovedY !by 0
+}
+; Characters movement and render characters to screen
+AfterScrollers
+!ifdef CharEffects_DebugBorder {
+	lda #VIC2Colour_Green
+	sta VIC2BorderColour
+}
+
+!ifdef CharEffects_CoordinateShiftX {
+	lda ScrollerScreenCharMovedX
+!if CharEffects_CoordinateShiftX = 1 {
+	asl
+}
+	sta CharEffects_preCalcScrollerScreenCharMovedX
+}
+!ifdef CharEffects_CoordinateShiftY {
+	lda ScrollerScreenCharMovedY
+!if CharEffects_CoordinateShiftY = 1 {
+	asl
+}
+	sta CharEffects_preCalcScrollerScreenCharMovedY
+}
+	lda ScrollerBankVisible
+	sta tempWork0
+
+!ifdef CharEffects_EnableAfterScrollersSpeedCode {	
+!for .ii , kNumCharEffects {
+	+MCharEffects_AfterScrollersSpeedCode .ii - 1
+}
+
+} else {
+	; Draw player characters
+	ldx #kNumCharEffects-1
+.l1
+	lda CharEffectsY,x
+	bmi .o1
+
+	dec CharEffectsTime,x
+	bmi .offScreen
+
+	clc
+!ifdef CharEffects_CoordinateShiftY {
+!if CharEffects_CoordinateShiftY = 1 {
+	adc CharEffects_preCalcScrollerScreenCharMovedY
+}
+} else {
+	adc ScrollerScreenCharMovedY
+}
+	clc
+	adc CharEffectsYVel,x
+!ifdef CharEffects_CoordinateShiftY {
+!if CharEffects_CoordinateShiftY = 1 {
+	cmp #(20 + Scroller_AdditionalCharLines)*2
+}
+} else {
+	cmp #20 + Scroller_AdditionalCharLines
+}
+	bcs .offScreen
+	sta CharEffectsY,x
+
+	lda CharEffectsX,x
+	clc
+!ifdef CharEffects_CoordinateShiftX {
+!if CharEffects_CoordinateShiftX = 1 {
+	adc CharEffects_preCalcScrollerScreenCharMovedX
+}
+} else {
+	adc ScrollerScreenCharMovedX
+}
+
+	clc
+	adc CharEffectsXVel,x
+!ifdef CharEffects_CoordinateShiftX {
+!if CharEffects_CoordinateShiftX = 1 {
+	cmp #40*2
+}
+} else {
+	cmp #40
+}
+	bcs .offScreen
+	sta CharEffectsX,x
+
+!ifdef CharEffects_CoordinateShiftY {
+	lda CharEffectsY,x
+!if CharEffects_CoordinateShiftY = 1 {
+	lsr
+}
+	tay
+} else {
+	ldy CharEffectsY,x
+}
+	lda ScreenTabH,y
+	sta CharEffectsScrH,x
+	sta tempWork1
+	lda ScreenTabL,y
+	sta CharEffectsScrL,x
+	sta tempWork2
+
+!ifdef CharEffects_CoordinateShiftX {
+	lda CharEffectsX,x
+!if CharEffects_CoordinateShiftX = 1 {
+	lsr
+}
+	tay
+	sta CharEffectsUsedX,x
+} else {
+	ldy CharEffectsX,x
+}
+	lda tempWork1
+	ora tempWork0
+	sta tempWork3
+	lda (tempWork2),y
+	cmp #MapSolidCharsUpper
+	bcs .offScreen
+	sta CharEffectsBkChar,x
+
+	lda tempWork1
+	ora #>COLOURRAM
+	sta tempWork3
+	lda (tempWork2),y
+	sta CharEffectsBkCol,x
+
+.o1
+	dex
+	bpl .l1
+}
+
+!ifdef CharEffects_EnableAfterScrollersSpeedCode2 {
+!for .ii , kNumCharEffects {
+	+MCharEffects_AfterScrollersSpeedCode2 .ii - 1
+}
+} else {
+	ldx #kNumCharEffects-1
+.l2
+	lda CharEffectsY,x
+	bmi .o2
+
+	lda CharEffectsScrH,x
+	sta tempWork1
+	lda CharEffectsScrL,x
+	sta tempWork2
+
+!ifdef CharEffects_CoordinateShiftX {
+	ldy CharEffectsUsedX,x
+} else {
+	ldy CharEffectsX,x
+}
+
+	lda tempWork1
+	ora tempWork0
+	sta tempWork3
+
+	lda CharEffectsChar,x
+	sta (tempWork2),y
+
+	lda tempWork1
+	ora #>COLOURRAM
+	sta tempWork3
+	lda CharEffectsCol,x
+	sta (tempWork2),y
+
+!ifdef CharEffects_HiddenIndexLookupEnabled {
+	; Store char effect index
+	lda tempWork1
+	ora #>CharEffects_HiddenIndexLookup
+	sta tempWork3
+	txa
+	sta (tempWork2),y
+}
+
+.o2
+	dex
+	bpl .l2
+}
+
+!ifdef CharEffects_DebugBorder {
+	lda #VIC2Colour_Black
+	sta VIC2BorderColour
+}
+
+	rts
+
+CharEffects_SpriteYPosToScreenCharPos
+!fill VIC2SpriteYBorderTop-10-4 , -1
+!for .num , 20+Scroller_AdditionalCharLines { !fill 8 , (.num-1) }
+!fill 256 - (* - CharEffects_SpriteYPosToScreenCharPos) , -1
+
+CharEffects_SpriteXPosToScreenCharPos
+!fill (VIC2SpriteXBorderLeft-10-2)/2 , -1
+!for .num , 40 { !fill 4 , (.num-1) }
+!fill 256 - (* - CharEffects_SpriteXPosToScreenCharPos) , -1

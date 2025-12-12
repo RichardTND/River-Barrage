@@ -1,0 +1,17 @@
+Output dir: C:\c64dev\C64Public-master\River_Barrage\bin
+parsing
+Got 15 errors and 0 warnings while executing:
+  (C:\c64dev\C64Public-master\River_Barrage\TextDepackLink.asm 1:14) Error: Syntax error
+  (C:\c64dev\C64Public-master\River_Barrage\TextDepackLink.asm 3:16) Error: Invalid token
+  (C:\c64dev\C64Public-master\River_Barrage\TextDepackLink.asm 3:17) Error: Invalid token
+  (C:\c64dev\C64Public-master\River_Barrage\TextDepackLink.asm 6:18) Error: Invalid token
+  (C:\c64dev\C64Public-master\River_Barrage\TextDepackLink.asm 6:19) Error: Invalid token
+  ...
+
+;Text depack linker for DALI crunched files.
+             ^
+
+Error: Syntax error
+at line 1, column 14 in TextDepackLink.asm
+
+

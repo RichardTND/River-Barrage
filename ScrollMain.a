@@ -1,0 +1,1503 @@
+MarkMainCode = *
+; Memory map while the game is running:
+; $0400-$07ff - Score panel screen
+; $0800-$0fff - Screens in bank 0 to fool VIC into not displaying sprites in the opened borders, mirrors $c800 and $cb00 from bank 3.
+; $1000-$bfff - Code and data
+; $c000-$c7ff - Character data
+; $c800-$cbff - Screen 0
+; $cc00-$cfff - Screen 1
+; $d000-$ffbf - Sprites - 191
+!zn
+InitBank0Data
+	; Init music
+!ifdef Scroller_MultiDirection {
+	lda #0
+	jsr MusicPlayerInit
+}
+	lda #6
+	sta $d020 
+
+!ifdef Scroller_MultiDirection {
+	lda frameScrollX
+	sta topScreenScrollX
+	lda frameScrollY
+	sta topScreenScrollY
+} else {
+	lda frameScrollPos
+	sta topScreenScrollPos
+}
+
+!ifdef EnableScorePanelDataHook {
+	jsr BeforeScorePanelDataHook
+}
+
+!ifndef Scroller_UseDemoScorePanelStaticMemory {
+	ldx #0
+.cch2
+!ifdef Scroller_UseDemoScorePanel {
+!for .t1 , 8 {
+	lda ScorePanelChars+((.t1-1)*$100),x
+	sta Bank0ScorePanelChars+((.t1-1)*$100),x
+}
+} else {
+	lda #0
+	sta Bank0ScorePanelChars,x
+}
+	dex
+	bne .cch2
+}
+
+!ifdef Scroller_FullScreen {} else {
+	ldx #39
+.colf1
+Scroller_ScorePanelTopLeft = ((20+Scroller_AdditionalCharLines) * VIC2ScreenCharsWidth)
+
+	lda #0						; In case the split happens early, draw blank chars (should never happen to be honest)
+	sta SCREENRAM - VIC2ScreenCharsWidth,x
+!ifdef Scroller_UseDemoScorePanel {
+
+!for .t1,5-Scroller_AdditionalCharLines {
+	lda ScorePanelCharData+((.t1 - 1) * VIC2ScreenCharsWidth),x
+	sta SCREENRAM + Scroller_ScorePanelTopLeft + ((.t1 - 1) * VIC2ScreenCharsWidth),x
+	tay
+	lda ScorePanelColourLookup,y
+	sta COLOURRAM + Scroller_ScorePanelTopLeft + ((.t1 - 1) * VIC2ScreenCharsWidth),x
+}
+} else {
+	; This just creates a pattern in the score panel area. Useful for debugging.
+	txa
+	ora #$20
+!if Scroller_AdditionalCharLines < 1 {
+	sta SCREENRAM+(20*40),x
+	sta COLOURRAM+(20*40),x
+}
+!if Scroller_AdditionalCharLines < 2 {
+	sta SCREENRAM+(21*40),x
+	sta COLOURRAM+(21*40),x
+}
+	sta SCREENRAM+(22*40),x
+	sta COLOURRAM+(22*40),x
+	sta SCREENRAM+(23*40),x
+	sta COLOURRAM+(23*40),x
+	sta SCREENRAM+(24*40),x
+	sta COLOURRAM+(24*40),x
+}
+	dex
+	bpl .colf1
+} ;< !ifdef Scroller_FullScreen
+
+!ifdef Scroller_RunJumpDemo {
+	jsr RunJump_InitTimer
+}
+
+	; Blank sprites frames in the unused area of the score panel screen
+	+MVIC2SpriteIndex_A Bank0PanelBlankSpriteData
+	ldx #7
+.spr2
+	sta SCREENRAM + SPRITEFRAMESCROFF,x
+	sta $800 + SPRITEFRAMESCROFF,x
+	sta $c00 + SPRITEFRAMESCROFF,x
+	dex
+	bpl .spr2
+
+!ifndef Scroller_UseDemoScorePanelStaticMemory {
+	; Blank sprite data in this bank
+	ldx #VIC2MemorySetup_SpriteSize-1
+	lda #0
+.spr1
+	sta Bank0PanelBlankSpriteData,x
+	dex
+	bpl .spr1
+}
+
+!ifdef EnableScorePanelDataHook {
+	jsr AfterScorePanelDataHook
+}
+
+	rts
+
+!zn
+ClearGameScreens
+	; Clear the screens
+	ldx #0
+	lda #ClearGameScreensChar
+.clm1
+	sta $c800,x
+	sta $c900,x
+	sta $ca00,x
+	sta $cb00,x
+	sta $cc00,x
+	sta $cd00,x
+	sta $ce00,x
+	sta $cf00,x
+	dex
+	bne .clm1
+
+!ifdef Scroller_FullScreen { } else {
+	ldx #39
+.colf1
+	lda SCREENRAM+(20+Scroller_AdditionalCharLines)*40,x
+	sta $0800+(20+Scroller_AdditionalCharLines)*40,x
+	sta $0c00+(20+Scroller_AdditionalCharLines)*40,x
+	sta $c800+(20+Scroller_AdditionalCharLines)*40,x
+	sta $cc00+(20+Scroller_AdditionalCharLines)*40,x
+	dex
+	bpl .colf1
+}
+
+	rts
+
+!ifdef Scroller_MultiDirection { } else {
+; The next type of player to try to spawn. If it is -1 then don't bother checking.
+PlayerNumberToSpawnNext !by 0
+}
+
+!zn
+ScrollerScreenCharMovedX !by 0
+ScrollerScreenCharMovedY !by 0
+InitialiseGame
+	; Just to make sure we disable interrupts
+	sei
+!ifdef Scroller_MultiDirection {
+	; Copies the intial sprite positions from the multiplexor to the simple animation table storage
+!ifndef DisableUpdateMultiplexorToAnimation {
+	jsr UpdateMultiplexorToAnimation
+}
+} else {
+	jsr TitleScreenWaitForOffScreenFromRaster
+}
+
+; For testing purposes don't wait for raster IRQs that don't happen :)
+InitialiseGameWithoutWait
+
+!ifdef Scroller_LOTD {
+	jsr SpellColourReset
+}
+
+	; Initialise the multiplexor
+!ifdef Scroller_MultiDirection { } else {
+!ifdef Multiplex_LogCollisions {
+!ifdef Multiplexor_UpdateCollisionDetailsSoftEnable {
+	lda #$ff
+	sta Multiplexor_UpdateCollisionDetailsSoftEnableFlag
+}
+}
+}
+	lda #Multiplex_items
+	sta Multiplex_MaxSpr
+	jsr Multiplex_InitSort
+
+!ifdef ScrollerPreGameCalcuation_Enable {
+	jsr ScrollerPreGameCalcuation
+}
+
+!ifndef ScrollerTestingNoWait {
+	+MACROWaitForTheLastScanPlus1_A
+}
+
+	; Zero out the pixel scroll values
+	lda #0
+	; Disable the screen
+	sta VIC2ScreenControlV
+	; Stop any presses of restore on the title screen from quitting the game on the first frame
+	sta NMINotTimerGenerated
+
+	; MPi: TODO: For the SEUCK player use demo4.bin to:
+	; 1) Adjust the character screen y pixel position such that the display position is the same
+	;		as SEUCK.
+	; 2) Adjust the sprite y position for enemies and players such that the position matches with
+	;		SEUCK. The attack wave control does not need tweaking, it is already exact with the
+	;		map coords.
+	; This might be tricky because the map scroll position updates on a zero pixel boundary...
+!ifdef Scroller_MultiDirection {
+!ifndef Scroller_RunJumpDemo {
+	sta frameScrollX
+	sta frameScrollY
+}
+} else {
+	sta frameScrollPos
+	sta frameTotalScrScroll
+	sta frameScrollMoveColours
+	sta frameTargetVelX
+	sta frameTargetVelY
+!ifdef Paralax_Enable {
+	sta paralaxMoveThisFrame
+}
+	sta ScrollerScreenCharMovedX
+	sta ScrollerScreenCharMovedY
+	sta scrollerRealMovementYPixels
+	sta TotalScrollPosition
+	sta TotalScrollPosition+1
+
+!ifdef Scroller_LOTD {
+	sta SpellPlayer1Counter
+	sta SpellPlayer2Counter
+}
+
+	lda soundoption 
+	beq playmusiconly 
+	jmp playsfxonly 
+playmusiconly 
+	lda #1
+	jsr MusicPlayerInit
+	jmp done_there	
+!ifdef Scroller_PlaySoundEffectsDuringGame {
+playsfxonly	
+	jsr SFXSIDInit
+}
+}
+done_there
+
+	ldx #$00 
+movepanel 
+	lda SpritePanelData,x
+	sta $0900,x 
+	lda SpritePanelData+$100,x
+	sta $0a00,x
+
+	inx 
+	bne movepanel 
+
+
+!ifdef Scroller_ClearColour {
+	lda #Scroller_ClearColour
+	ldx #0
+.l1
+	sta COLOURRAM,x
+	sta COLOURRAM+$100,x
+	sta COLOURRAM+$200,x
+	sta COLOURRAM+$300,x
+	dex
+	bne .l1
+}
+
+	jsr InitBank0Data
+	jsr ClearGameScreens
+	jsr ScrollerInitTables
+
+!ifdef Scroller_SetSpriteBackgroundPriority {
+	lda #Scroller_SetSpriteBackgroundPriority
+	sta VIC2SpritePriority
+}
+
+!ifdef Scroller_MultiDirection {
+!ifdef UseAnimationInit {
+	jsr AnimationInit
+	jsr AnimationClearMultiplexor
+	jsr Multiplex_Sort
+}
+!ifdef UseAnimationInit2 {
+	jsr AnimationInit2
+}
+} else {
+	jsr AnimationInit
+	jsr AnimationClearMultiplexor
+	jsr Multiplex_Sort
+	jsr InitPlayers
+	jsr InitScore
+	lda #$ff
+	sta PlayerNumberToSpawnNext
+!ifdef Scroller_LOTD {
+	; Stop spell effects from damaging at the start of the game
+	lda #0
+	sta SpellPlayer1Counter
+	sta SpellPlayer2Counter
+}
+!ifdef Scroller_TwinMode {
+	jsr InitPlayer1
+	jsr InitPlayer2
+	lda #$ff
+	sta PlayerNumberToSpawnNext
+} else {
+!ifdef WackyWaste {
+	lda #0
+	sta Player1Properties+PlayerOffset_Enabled
+	lda #1
+	sta Player2Properties+PlayerOffset_Enabled
+}
+	; A good place to initialse the player sprites but we need to detect from the title
+	; screen who started the game, player 1 or player 2.
+	lda TitleScreenJoystickStarted
+	beq .stick0Tests
+	; Find an enabled player
+	lda Player2Properties+PlayerOffset_Enabled
+	beq .next1
+	jsr InitPlayer2
+	lda #0
+	sta PlayerNumberToSpawnNext
+	jmp .over
+.next1
+	lda Player1Properties+PlayerOffset_Enabled
+	beq .over
+	jsr InitPlayer1
+	lda #1
+	sta PlayerNumberToSpawnNext
+	jmp .over
+.stick0Tests
+	; Find an enabled player
+	lda Player1Properties+PlayerOffset_Enabled
+	beq .next0
+	jsr InitPlayer1
+	lda #1
+	sta PlayerNumberToSpawnNext
+	jmp .over
+.next0
+	lda Player2Properties+PlayerOffset_Enabled
+	beq .over
+	jsr InitPlayer2
+	lda #0
+	sta PlayerNumberToSpawnNext
+.over
+}
+
+	lda #$ff
+	sta VIC2SpriteMulticolour
+	lda SpriteFixedColours
+	sta VIC2ExtraSpriteColour1
+	lda SpriteFixedColours+1
+	sta VIC2ExtraSpriteColour2
+
+	jsr LevelInit
+
+	; We skip the enemies that might have been before in the map
+	jsr LevelCalculateTotalScrollValue
+	jsr AnimationEnemyTriggerInit
+	jsr AnimationEnemyTriggerSkipMap
+
+}
+	; Reset the exit level counter/flag and the pause flag
+	lda #0
+	sta ScrollerExitMainLineCounter
+	sta MainlineIsPaused
+
+	jsr DrawMap
+	lda #$cb
+	jsr Multiplex_SetSpritePointer
+
+!ifdef Scroller_MultiDirection {
+!ifdef Scroller_MultiDirection_RunPreFrame {
+	jsr HandleUserInput
+	jsr UpdateSprites
+
+!ifdef Multiplex_SplitSort {
+	jsr AnimationUpdateMultiplexorPre
+	jsr Multiplex_Sort
+}
+	jsr AnimationUpdateMultiplexor
+!ifdef Multiplex_SplitSort { } else {
+	jsr Multiplex_Sort
+}
+!ifdef Multiplex_SplitSort {
+	jsr CopyMultiplexTables
+}
+} ;< !ifdef Scroller_MultiDirection_RunPreFrame {
+}
+
+	rts
+
+!zn
+AnimationClearMultiplexor
+	ldx #Multiplex_items-1
+	lda #$ff
+.l1
+	sta Multiplex_YPos,x
+
+	dex
+	bpl .l1
+	rts
+
+
+!ifdef Scroller_MultiDirection { } else {
+; MPi: TODO: Macro these two
+InitPlayer1
+!ifdef Scroller_LinkedPlayers {
+InitPlayer2
+}
+	ldy #AnimationType_Player1
+	jsr AnimationFindFreeSlot
+	; No error check needed since animations have just been initialised
+	stx Player1Information+PlayerGameOffset_AnimationIndex
+
+	; Reuse some of the player spawn code to get a safe position
+	jsr Player1TestSpawnPosition
+
+	lda Player1Properties+PlayerOffset_Lives
+	sta Player1Information+PlayerGameOffset_Lives
+	lda TitleScreenJoystickStarted
+	sta Player1Information+PlayerGameOffset_JoyStickPort
+	jsr ScorePlayer1RenderForce
+	jsr ScorePlayer1RenderLivesForce
+	; Reset the counter because we might have spawned after a player died for the last time
+	lda #0
+	sta ScrollerExitMainLineCounter
+
+!ifdef Scroller_LinkedPlayers {
+	ldy #AnimationType_Player2
+	jsr AnimationFindFreeSlot
+	; No error check needed since animations have just been initialised
+	stx Player2Information+PlayerGameOffset_AnimationIndex
+	jsr Player2TestSpawnPosition
+	lda TitleScreenJoystickStarted
+	sta Player2Information+PlayerGameOffset_JoyStickPort
+}
+	rts
+
+!ifdef Scroller_LinkedPlayers { } else {
+InitPlayer2
+	ldy #AnimationType_Player2
+	jsr AnimationFindFreeSlot
+	; No error check needed since animations have just been initialised
+	stx Player2Information+PlayerGameOffset_AnimationIndex
+
+	; Reuse some of the player spawn code to get a safe position
+	jsr Player2TestSpawnPosition
+
+	lda Player2Properties+PlayerOffset_Lives
+!ifdef Scroller_SingleScoreLives {
+	sta Player1Information+PlayerGameOffset_Lives
+} else {
+	sta Player2Information+PlayerGameOffset_Lives
+}
+	lda TitleScreenJoystickStarted
+	sta Player2Information+PlayerGameOffset_JoyStickPort
+	jsr ScorePlayer2RenderForce
+	jsr ScorePlayer2RenderLivesForce
+	; Reset the counter because we might have spawned after a player died for the last time
+	lda #0
+	sta ScrollerExitMainLineCounter
+	rts
+}
+
+}
+
+; If this is already at 0 then don't count down and don't exit.
+; If this is > 0 then count down and if the count reaches zero then exit the mainline loop.
+ScrollerExitMainLineCounter !by 0
+MainlineIsPaused !by 0
+
+; The frame logic is:
+; Wait for the top interrupt to happen.
+; User input
+; ScrollerCalculate
+; Game object logic
+; Play music
+; Wait for the end of the multiplexor interrupt to happen.
+; Sort the sprites for the next multiplexor frame
+; Wait for the score panel
+; Update the fine scroll screen position from the frame for the top interrupt to display.
+; If needed: Do the character screen scroll. Or;
+; If needed: Switch screen banks (for the top interrupt to display). Update colour scrolling screen.
+!zn
+.pauseKeyPressed !by 0
+.quitKeyPressed !by 0
+.scannedKeys !by 0
+.rsReleasetoggle !by 0
+!ifdef Scroller_MultiDirection { } else {
+.player1SpellKeyPressed !by 0
+.player2SpellKeyPressed !by 0
+}
+!ifdef Scroller_ScanForSpace {
+Scroller_KeySpacePressed !by 0
+}
+ScrollerDemoMainline
+	+MStackConsistencyCheck_AX
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_Black
+	sta VIC2BorderColour
+}
+	; Wait for the screen scrollng registers to be updated
+	jsr ScrollerDemoWaitTopIRQ
+
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_Green
+	sta VIC2BorderColour
+}
+
+	; Pause and quit key check
+	; MPi: TODO: Consider tidying this into a couple of functions
+.afterScrollerDemoWaitTopIRQ
+	lda #0
+	sta .pauseKeyPressed
+	sta .quitKeyPressed
+!ifdef Scroller_ScanForSpace {
+	sta Scroller_KeySpacePressed
+}
+!ifdef Scroller_MultiDirection { } else {
+	sta .player1SpellKeyPressed
+	sta .player2SpellKeyPressed
+}
+	sta CIA1KeyboardColumnJoystickA
+	lda CIA1KeyboardRowsJoystickB
+	cmp #$ff
+	beq .noKey
+	; Prime what part of the keyboard to read
+	lda #%01111111
+	sta CIA1KeyboardColumnJoystickA
+.again
+	lda CIA1KeyboardRowsJoystickB
+	cmp CIA1KeyboardRowsJoystickB
+	bne .again
+	cmp #$ff
+	beq .noKey
+	sta .scannedKeys
+	lda #%10000000
+	bit .scannedKeys
+	bne .notRunStop
+	lda #1
+	sta .pauseKeyPressed
+.notRunStop
+	lda #%01000000
+	bit .scannedKeys
+	bne .noQuitKey
+	lda #1
+	sta .quitKeyPressed
+.noQuitKey
+!ifdef Scroller_ScanForSpace {
+	lda #%00010000
+	bit .scannedKeys
+	bne .noSpace
+	lda #1
+	sta Scroller_KeySpacePressed
+.noSpace
+}
+.noKey
+!ifdef Scroller_LOTD {
+	; Detect the spell key S
+	lda #%11111101
+	sta CIA1KeyboardColumnJoystickA
+.again2
+	lda CIA1KeyboardRowsJoystickB
+	cmp CIA1KeyboardRowsJoystickB
+	bne .again2
+	cmp #$ff
+	beq .notS
+	sta .scannedKeys
+	lda #%00100000
+	bit .scannedKeys
+	bne .notS
+	; Check the player is active before starting the spell effect
+	lda Player1Information+PlayerGameOffset_AnimationIndex
+	bmi .notS
+	lda #1
+	sta .player1SpellKeyPressed
+.notS
+	; Detect the spell key K
+	lda #%11101111
+	sta CIA1KeyboardColumnJoystickA
+.again3
+	lda CIA1KeyboardRowsJoystickB
+	cmp CIA1KeyboardRowsJoystickB
+	bne .again3
+	sta .scannedKeys
+	lda #%00100000
+	bit .scannedKeys
+	bne .noKey2
+	; Check the player is active before starting the spell effect
+	lda Player2Information+PlayerGameOffset_AnimationIndex
+	bmi .noKey2
+	lda #1
+	sta .player2SpellKeyPressed
+.noKey2
+	} ; < !ifdef Scroller_LOTD
+
+	; Reset the port read
+	lda #%01111111
+	sta CIA1KeyboardColumnJoystickA
+
+	; Check for the fire buttons unpausing
+	lda MainlineIsPaused
+	beq .overFire
+	lda #JoystickBits_Fire
+	bit CIA1KeyboardColumnJoystickA
+	beq .fireUnpause
+	bit CIA1KeyboardRowsJoystickB
+	beq .fireUnpause
+	jmp .overFire
+.fireUnpause
+	jsr UnpauseAndSetVolume
+.overFire
+
+	; Check for an errant NMI being generated (like the restore key) and quit if needed.
+	lda NMINotTimerGenerated
+	bne .retFromGame
+
+	; Now process the key toggle pressing
+	lda .pauseKeyPressed
+	beq .notPressedRS
+	lda .rsReleasetoggle
+	bne .overRSTest
+	lda #1
+	sta .rsReleasetoggle
+	eor MainlineIsPaused
+	sta MainlineIsPaused
+	bne .overRSTest
+.fireUnpause2
+	jsr UnpauseAndSetVolume
+	jmp .overRSTest
+.notPressedRS
+	lda #0
+	sta .rsReleasetoggle
+.overRSTest
+
+	; Now check the pause status
+	lda MainlineIsPaused
+	beq .notPaused
+	lda .quitKeyPressed
+	beq .notPressedQ
+	; Quit, yes this is really it
+.retFromGame
+	rts
+.notPressedQ
+	lda #0
+	sta SIDVolumeFilter
+	jmp ScrollerDemoMainline
+.notPaused
+
+!ifdef Scroller_MultiDirection { } else {
+	; Process any second player pressing their fire button
+	lda PlayerNumberToSpawnNext
+	bmi .noOthers
+	; Test the other button to that which started the game
+	lda TitleScreenJoystickStarted
+	beq .testStick1
+	; Test stick 0
+	lda #JoystickBits_Fire
+	bit CIA1KeyboardColumnJoystickA
+	beq .doSpawnCommon
+	jmp .noOthers
+.testStick1
+	lda #JoystickBits_Fire
+	bit CIA1KeyboardRowsJoystickB
+	bne .noOthers
+.doSpawnCommon
+	; Toggle this for init player to use
+	lda TitleScreenJoystickStarted
+	eor #1
+	sta TitleScreenJoystickStarted
+	lda PlayerNumberToSpawnNext
+	bne .next1
+	lda Player1Properties+PlayerOffset_Enabled
+	beq .next2
+	jsr InitPlayer1
+	jmp .next2
+.next1
+	lda Player2Properties+PlayerOffset_Enabled
+	beq .next2
+	jsr InitPlayer2
+	; No other player enabled so we just ignore it from now on
+.next2
+	; Mark the next attempt to fail earlier to avoid wasting time
+	lda #$ff
+	sta PlayerNumberToSpawnNext
+.noOthers
+} ;<<!ifdef Scroller_MultiDirection
+
+
+
+
+!ifdef Scroller_LOTD {
+	; MPi: TODO: Move this code to somewhere more sensible like the player control
+	; Begin processing spell damage
+	; First mark it as no spells active
+	lda #$ff
+	sta smSpellEffectRunningPlayerType+1
+	; Then check to see if we should cause damage from either player's spells
+	lda SpellPlayer1Counter
+	beq .notRunningPlayer1Spell
+
+	dec SpellPlayer1Counter
+	lda #AnimationType_Player1Bullet
+	sta smSpellEffectRunningPlayerType+1
+	jmp .checkForNewSpells
+.exitSpell1S jmp .exitSpell1
+.noSpellStarted1S jmp .noSpellStarted1
+.notRunningPlayer1Spell
+	lda SpellPlayer2Counter
+	beq .checkForNewSpells
+	dec SpellPlayer2Counter
+	lda #AnimationType_Player2Bullet
+	sta smSpellEffectRunningPlayerType+1
+
+	; MPi: TODO: Move this code to somewhere more sensible like the player control
+	; Check for spells being used
+.checkForNewSpells
+	lda .player1SpellKeyPressed
+	beq .noSpellStarted1S
+
+	lda Player1Information+PlayerGameOffset_Spells
+	beq .noSpellStarted1S
+
+	; To handle the case when the player starts a spell effect and then picks up another bottle as it is running
+	clc
+	adc SpellPlayer1Counter
+	sta SpellPlayer1Counter
+
+	jsr SpellColourStart
+	ldy #AnimationType_Spell1+2
+	jsr AnimationFindFreeSlot
+	bcs .exitSpell1S
+	; Fill in the various information for the animation engine to take over
+	lda #1
+	sta AnimationXPosLo,x
+	lda #0
+	sta AnimationXPosHi,x
+	lda #170
+	sta AnimationYPos,x
+
+	ldy #AnimationType_Spell1+2
+	jsr AnimationFindFreeSlot
+	bcs .exitSpell1S
+	; Fill in the various information for the animation engine to take over
+	lda #1
+	sta AnimationXPosLo,x
+	lda #0
+	sta AnimationXPosHi,x
+	lda #150
+	sta AnimationYPos,x
+
+	ldy #AnimationType_Spell1+2
+	jsr AnimationFindFreeSlot
+	bcs .exitSpell1
+	; Fill in the various information for the animation engine to take over
+	lda #1
+	sta AnimationXPosLo,x
+	lda #0
+	sta AnimationXPosHi,x
+	lda #190
+	sta AnimationYPos,x
+
+	; Change the way the spell looks depnding on the spell strength
+	lda Player1Information+PlayerGameOffset_Spells
+	cmp #2
+	bcc .exitSpell1
+	ldy #AnimationType_Spell1+2
+	jsr AnimationFindFreeSlot
+	bcs .exitSpell1
+	; Fill in the various information for the animation engine to take over
+	lda #1
+	sta AnimationXPosLo,x
+	lda #0
+	sta AnimationXPosHi,x
+	lda #210
+	sta AnimationYPos,x
+
+	ldy #AnimationType_Spell1+2
+	jsr AnimationFindFreeSlot
+	bcs .exitSpell1
+	; Fill in the various information for the animation engine to take over
+	lda #1
+	sta AnimationXPosLo,x
+	lda #0
+	sta AnimationXPosHi,x
+	lda #130
+	sta AnimationYPos,x
+
+	lda Player1Information+PlayerGameOffset_Spells
+	cmp #3
+	bcc .exitSpell1
+	ldy #AnimationType_Spell1+2
+	jsr AnimationFindFreeSlot
+	bcs .exitSpell1
+	; Fill in the various information for the animation engine to take over
+	lda #1
+	sta AnimationXPosLo,x
+	lda #0
+	sta AnimationXPosHi,x
+	lda #110
+	sta AnimationYPos,x
+
+	ldy #AnimationType_Spell1+2
+	jsr AnimationFindFreeSlot
+	bcs .exitSpell1
+	; Fill in the various information for the animation engine to take over
+	lda #1
+	sta AnimationXPosLo,x
+	lda #0
+	sta AnimationXPosHi,x
+	lda #230
+	sta AnimationYPos,x
+
+.exitSpell1
+	; Stop the spell effect from triggering again since it has been used
+	lda #0
+	sta Player1Information+PlayerGameOffset_Spells
+
+.noSpellStarted1
+
+	lda .player2SpellKeyPressed
+	bne .spellStarted2
+	jmp .noSpellStarted2
+.spellStarted2
+
+	lda Player2Information+PlayerGameOffset_Spells
+	bne .spellStarted3
+	jmp .noSpellStarted2
+.spellStarted3
+
+	; To handle the case when the player starts a spell effect and then picks up another bottle as it is running
+	clc
+	adc SpellPlayer2Counter
+	sta SpellPlayer2Counter
+
+	jsr SpellColourStart
+	ldy #AnimationType_Spell1+3
+	jsr AnimationFindFreeSlot
+	bcc .notExitSpell2
+	jmp .exitSpell2
+.exitSpell2S jmp .exitSpell2
+.notExitSpell2
+	; Fill in the various information for the animation engine to take over
+	txa
+	and #31
+	adc #100
+	sta AnimationXPosLo,x
+	lda #0
+	sta AnimationXPosHi,x
+	lda #(VIC2SpriteYBorderTop-VIC2SpriteSizeY)+1
+	sta AnimationYPos,x
+	txa
+	and #15
+	adc #30
+	sta AnimationFireRateCount,x
+
+	ldy #AnimationType_Spell1+3
+	jsr AnimationFindFreeSlot
+	bcs .exitSpell2S
+	; Fill in the various information for the animation engine to take over
+	txa
+	and #31
+	adc #172
+	sta AnimationXPosLo,x
+	lda #0
+	sta AnimationXPosHi,x
+	lda #(VIC2SpriteYBorderTop-VIC2SpriteSizeY)+1
+	sta AnimationYPos,x
+	; Inroduce a bit of randomness to the effect
+	txa
+	and #15
+	adc #40
+	sta AnimationFireRateCount,x
+
+	; Change the way the spell looks depnding on the spell strength
+	lda Player2Information+PlayerGameOffset_Spells
+	cmp #2
+	bcc .exitSpell2S
+	ldy #AnimationType_Spell1+3
+	jsr AnimationFindFreeSlot
+	bcs .exitSpell2S
+	; Fill in the various information for the animation engine to take over
+	txa
+	and #31
+	adc #30
+	sta AnimationXPosLo,x
+	lda #0
+	sta AnimationXPosHi,x
+	lda #(VIC2SpriteYBorderTop-VIC2SpriteSizeY)+1
+	sta AnimationYPos,x
+	txa
+	and #15
+	sta AnimationFireRateCount,x
+
+	ldy #AnimationType_Spell1+3
+	jsr AnimationFindFreeSlot
+	bcs .exitSpell2
+	; Fill in the various information for the animation engine to take over
+	txa
+	and #15
+	adc #75
+	sta AnimationXPosLo,x
+	lda #0
+	sta AnimationXPosHi,x
+	lda #(VIC2SpriteYBorderTop-VIC2SpriteSizeY)+1
+	sta AnimationYPos,x
+	txa
+	and #31
+	adc #20
+	sta AnimationFireRateCount,x
+
+	lda Player2Information+PlayerGameOffset_Spells
+	cmp #3
+	bcc .exitSpell2
+	ldy #AnimationType_Spell1+3
+	jsr AnimationFindFreeSlot
+	bcs .exitSpell2
+	; Fill in the various information for the animation engine to take over
+	txa
+	and #31
+	adc #200
+	sta AnimationXPosLo,x
+	lda #0
+	sta AnimationXPosHi,x
+	lda #(VIC2SpriteYBorderTop-VIC2SpriteSizeY)+1
+	sta AnimationYPos,x
+	txa
+	and #15
+	adc #10
+	sta AnimationFireRateCount,x
+
+	ldy #AnimationType_Spell1+3
+	jsr AnimationFindFreeSlot
+	bcs .exitSpell2
+	; Fill in the various information for the animation engine to take over
+	txa
+	and #15
+	adc #120
+	sta AnimationXPosLo,x
+	lda #0
+	sta AnimationXPosHi,x
+	lda #(VIC2SpriteYBorderTop-VIC2SpriteSizeY)+1
+	sta AnimationYPos,x
+	txa
+	and #31
+	adc #20
+	sta AnimationFireRateCount,x
+
+.exitSpell2
+	; Stop the spell effect from triggering again since it has been used
+	lda #0
+	sta Player2Information+PlayerGameOffset_Spells
+.noSpellStarted2
+	jsr SpellColourFadeRoutine
+}
+
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_White
+	sta VIC2BorderColour
+}
+	; Start of the real game frame in whatever remaining time is left which may occur during the next frame time.
+	jsr HandleUserInput
+
+!ifdef Scroller_LevelSkipDemoCode {
+	; Only consider running level skip code when screen bank 0 is displayed.
+	; LevelDoSwitch can only be called at this point in the mainline.
+	; This means if you want to trigger a level skip you will need to store a temporary flag value somewhere and then read the flag at this point.
+	; Otherwise you will see a colour flash as the screen is redrawn in the wrong bank.
+	lda topScreenBank
+	bne .skipLevelSkipDemo
+
+.smOnceOnly	lda #1			; Only trigger this code once when CIA1KeyboardRowsJoystickB JoystickBits_Up is pressed
+	beq .skipLevelSkipDemo
+
+	lda #JoystickBits_Up
+	bit CIA1KeyboardRowsJoystickB
+	bne .skipLevelSkipDemo
+
+	dec .smOnceOnly+1		; Trigger only once by clearing the flag
+
+	inc VIC2BorderColour	; Debug border change
+
+	; Now do the actual level skip
+	lda #Scroller_LevelSkipDemoCode	; The level number to jump to
+	jmp LevelDoSwitch
+
+.skipLevelSkipDemo
+}
+
+!ifdef Scroller_MultiDirection { } else {
+	jsr LevelFrameLogic
+}
+SkipLevelFrameLogic
+
+	jsr ScrollerCalculate
+	; Game object logic
+!ifdef Scroller_MultiDirection { } else {
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_DarkGrey
+	sta VIC2BorderColour
+}
+	jsr AnimationTriggerEnemies
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_Grey
+	sta VIC2BorderColour
+}
+	jsr AnimationUpdateEnemyFire
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_Brown
+	sta VIC2BorderColour
+}
+	jsr AnimationRunCollisionDetection
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_LightGrey
+	sta VIC2BorderColour
+}
+	jsr AnimationUpdateFrameMovement
+} ;< !ifdef Scroller_MultiDirection { } else {
+
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_Blue
+	sta VIC2BorderColour
+}
+
+!ifdef Scroller_DoMusicUpdateInIRQ {
+!ifdef Scroller_CountMusicUpdateInIRQ {
+	!error "Scroller_DoMusicUpdateInIRQ and Scroller_CountMusicUpdateInIRQ must not be enabled at the same time"
+}
+}
+!ifdef DisableSound {} else {
+!ifndef Scroller_DoMusicUpdateInIRQ {
+!ifdef Scroller_DebugSoundTimings {
+	inc VIC2BorderColour
+}
+
+!ifdef Scroller_CountMusicUpdateInIRQ {
+.testMusicUpdate
+	lda Scroller_CountMusicUpdateInIRQNum
+	beq .skipMusicUpdate
+	dec Scroller_CountMusicUpdateInIRQNum
+}
+
+	
+!ifdef Scroller_PlaySoundEffectsDuringGame {
+	lda soundoption
+	cmp #1
+	beq playsfx2 
+	jsr MusicPlayerPlay
+	jmp skipsfxplay
+playsfx2
+	jsr SFXPlay
+skipsfxplay	
+} else {
+	jsr MusicPlayerPlay
+}
+
+!ifdef Scroller_CountMusicUpdateInIRQ {
+	jmp .testMusicUpdate
+}
+.skipMusicUpdate
+
+
+!ifdef Scroller_DebugSoundTimings {
+	dec VIC2BorderColour
+}
+} ;<< !ifndef Scroller_DoMusicUpdateInIRQ {
+} ;<< !ifdef DisableSound {} else {
+
+
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_Cyan
+	sta VIC2BorderColour
+}
+
+!ifdef Scroller_MultiDirection { } else {
+	inc .frameScoreUpdate
+	lda .frameScoreUpdate
+	and #3
+	sta .frameScoreUpdate
+	; Don't need to do all these four every frame, so we use .frameScoreUpdate to decide what to do
+	cmp #0
+	bne .notS0
+	jsr ScorePlayer1Render
+	jmp .notS3
+.notS0
+	cmp #1
+	bne .notS1
+	jsr ScorePlayer1RenderLives
+	jmp .notS3
+.notS1
+!ifdef Scroller_LinkedPlayers { } else {
+!ifdef Scroller_SingleScoreLives { } else {
+	cmp #2
+	bne .notS2
+	jsr ScorePlayer2Render
+}
+}
+	jmp .notS3
+.notS2
+!ifdef Scroller_LinkedPlayers { } else {
+!ifdef Scroller_SingleScoreLives { } else {
+	cmp #3
+	bne .notS3
+	jsr ScorePlayer2RenderLives
+}
+}
+.notS3
+}
+
+
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_Green
+	sta VIC2BorderColour
+}
+!ifdef Scroller_MultiDirection {
+	jsr UpdateSprites
+}
+
+!if 0 {
+	; Debugging code to force certain sprites for border timing
+	lda #14
+	sta AnimationColour+1
+	sta AnimationColour+2
+	sta AnimationColour+3
+	sta AnimationColour+4
+	sta AnimationColour+5
+	sta AnimationColour+6
+	sta AnimationColour+7
+	sta AnimationColour+8
+	lda #66
+	sta AnimationSpriteFrame+1
+	sta AnimationSpriteFrame+2
+	sta AnimationSpriteFrame+3
+	sta AnimationSpriteFrame+4
+	sta AnimationSpriteFrame+5
+	sta AnimationSpriteFrame+6
+	sta AnimationSpriteFrame+7
+	sta AnimationSpriteFrame+8
+	lda #30
+	sta AnimationXPosLo+1
+	lda #40
+	sta AnimationXPosLo+2
+	lda #50
+	sta AnimationXPosLo+3
+	lda #60
+	sta AnimationXPosLo+4
+	lda #70
+	sta AnimationXPosLo+5
+	lda #80
+	sta AnimationXPosLo+6
+	lda #90
+	sta AnimationXPosLo+7
+	lda #100
+	sta AnimationXPosLo+8
+
+	; This is the first visible sprite line for the top of the screen. Which is VIC2SpriteYBorderTop + 4
+	lda #54
+;	lda #50
+	sta AnimationYPos+1
+;	sta AnimationYPos+2
+;	sta AnimationYPos+3
+;	sta AnimationYPos+4
+;	sta AnimationYPos+5
+;	sta AnimationYPos+6
+;	sta AnimationYPos+7
+;	sta AnimationYPos+8
+}
+
+!if 0 {
+	lda #$ff
+	ldx #Multiplex_items-1
+	ldx #16
+.cl1
+;	lda AnimationYPos,x
+;	and #127
+	sta AnimationYPos,x
+	dex
+	bpl .cl1
+}
+
+
+	; MPi: Multiplex_SplitSort: Make Multiplex_Sort optionally work on a temporary Multiplex_indextable and read YPos values from a different source.
+	; This means it can sort sprites while the multiplexor is still displaying stuff. This means the sort can utilise spare time at the end of the frame before "jsr ScrollerDemoWaitMultiplex".
+	; In this case the temporary YPos values can come from AnimationYPos then get copied over after "jsr ScrollerDemoWaitMultiplex".
+	; Then always enable the animation engine and then always use "jsr AnimationUpdateMultiplexor" and then "jsr UpdateSprites" can also happen here before the ScrollerDemoWaitMultiplex.
+	; In this case jsr UpdateSprites can work on the animation positions and apply scrolling values.
+	; This is much more efficient use of the frame time.
+
+!ifdef Multiplex_SplitSort {
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_Brown
+	sta VIC2BorderColour
+}
+	jsr AnimationUpdateMultiplexorPre
+
+	; Sort them from the temporary buffers ready for the top IRQ
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_Cyan
+	sta VIC2BorderColour
+}
+	jsr Multiplex_Sort
+}
+
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_Black
+	sta VIC2BorderColour
+}
+	; Wait for the multiplex to finish its thing
+	jsr ScrollerDemoWaitMultiplex
+
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_Red
+	sta VIC2BorderColour
+}
+	jsr AnimationUpdateMultiplexor
+
+!ifdef Multiplex_SplitSort { } else {
+	; Sort them from the updated multiplexor values ready for the top IRQ
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_Cyan
+	sta VIC2BorderColour
+}
+	jsr Multiplex_Sort
+}
+
+!ifdef Multiplex_SplitSort {
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_LightRed
+	sta VIC2BorderColour
+}
+	jsr CopyMultiplexTables
+}
+
+
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_Black
+	sta VIC2BorderColour
+}
+	jsr ScrollerDemoWaitScorePanel
+.afterScrollerDemoWaitScorePanel
+
+!ifdef Scroller_DebugMainlineBorderForIRQ {
+	lda #VIC2Colour_LightBlue
+	sta VIC2BorderColour
+}
+	jsr ScrollerUpdateTopIRQ
+!ifdef Scroller_DebugMainlineBorderForIRQ {
+	lda #VIC2Colour_Black
+	sta VIC2BorderColour
+}
+
+!ifdef Paralax_Enable {
+!ifdef Paralax_Enable_More {
+	jsr ParalaxUpdate
+
+}
+}
+	jsr AnimateWaterChars
+	jsr CheckPlayerShields
+	
+
+!ifdef EnableBeforeScrollersHook {
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_DarkGrey
+	sta VIC2BorderColour
+}
+	jsr BeforeScrollers
+}
+
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_Purple
+	sta VIC2BorderColour
+}
+	jsr ScrollerScreen
+
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_LightGreen
+	sta VIC2BorderColour
+}
+	lda #0
+	sta ScrollerScreenCharMovedX
+	sta ScrollerScreenCharMovedY
+	jsr ScrollerOffScreen
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_Black
+	sta VIC2BorderColour
+}
+
+!ifdef EnableAfterScrollersHook {
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_LightGrey
+	sta VIC2BorderColour
+}
+	jsr AfterScrollers
+}
+
+!ifdef Paralax_Enable {
+	jsr ParalaxUpdate
+}
+	jsr RenderNewScorePanel 
+!ifdef UseEnemyProcessActivation {
+!ifdef Scroller_DebugMainlineBorder {
+	lda #VIC2Colour_LightRed
+	sta VIC2BorderColour
+}
+!ifdef Scroller_MultiDirection {
+	jsr EnemyProcessActivation
+}
+}
+
+	; When this is set, it will execute a count down timer and then exit.
+	; Very useful for triggering an end of game situation on player death.
+	lda ScrollerExitMainLineCounter
+	beq .doLoop
+	dec ScrollerExitMainLineCounter
+	bne .doLoop
+	; Must exit the loop now
+	rts
+.doLoop
+
+	jmp ScrollerDemoMainline
+
+!ifdef Multiplex_SplitSort {
+MultiplexSort_MaxSprSorted !by 0
+}
+
+!ifdef Scroller_MultiDirection { } else {
+.frameScoreUpdate !by 0
+}
+
+UnpauseAndSetVolume
+!ifndef Scroller_DoMusicUpdateInIRQ {
+	lda #15
+	sta SIDVolumeFilter
+}
+	lda #0
+	sta MainlineIsPaused
+	rts
+
+!ifdef Scroller_LOTD {
+SpellPlayer1Counter !by 0
+SpellPlayer2Counter !by 0
+}
+frameTargetVelX		!by 0
+frameTargetVelY		!by 0
+
+
+ScrollerDemo_OverrunCounter			!by 0
+ScrollerDemo_OverrunTopIRQFlag		!by 0
+ScrollerDemo_OverrunPanelIRQFlag	!by 0
+
+!zn
+ScrollerDemoWaitTopIRQWithReSync
+	lda #0
+	sta topIRQDone
+	sta bottomMultiplexIRQDone
+	sta panelIRQDone
+	sta ScrollerDemo_OverrunCounter
+	sta ScrollerDemo_OverrunTopIRQFlag
+	; Fall through
+ScrollerDemoWaitTopIRQ
+	lda #0
+	sta panelIRQDone
+
+	inc ScrollerDemo_OverrunCounter
+	inc ScrollerDemo_OverrunTopIRQFlag
+	lda topIRQDone
+	bne .l1
+	sta ScrollerDemo_OverrunCounter
+	sta ScrollerDemo_OverrunTopIRQFlag
+
+	; Wait for the top IRQ (at raster 0) to be done
+.l1
+!ifdef EnableScrollerDemoWaitTopIRQHook {
+!ifdef Scroller_DisplayTitleScreen {
+	lda TitleScreen_Enable_ScrollerDemoWait_Hooks
+	beq .noHook3
+}
+	lda topIRQDone
+	jsr ScrollerDemoWaitTopIRQHook
+.noHook3
+}
+	lda topIRQDone
+	beq .l1
+	lda #0
+	sta topIRQDone
+
+	; Debug
+;	lda ScrollerDemo_OverrunTopIRQFlag
+;	sta VIC2BorderColour
+
+	rts
+
+!zn
+ScrollerDemoWaitMultiplex
+	lda #0
+	sta topIRQDone
+
+	inc ScrollerDemo_OverrunCounter
+	lda bottomMultiplexIRQDone
+	bne .l1
+	sta ScrollerDemo_OverrunCounter
+
+	; Wait for the last mutiplex IRQ routine to be called
+.l1
+!ifdef EnableScrollerDemoWaitMultiplexHook {
+!ifdef Scroller_DisplayTitleScreen {
+	lda TitleScreen_Enable_ScrollerDemoWait_Hooks
+	beq .noHook1
+}
+	lda bottomMultiplexIRQDone
+	jsr ScrollerDemoWaitMultiplexHook
+.noHook1
+}
+	lda bottomMultiplexIRQDone
+	beq .l1
+	lda #0
+	sta bottomMultiplexIRQDone
+	rts
+
+!zn
+ScrollerDemoWaitScorePanel
+	lda #0
+	sta bottomMultiplexIRQDone
+
+	inc ScrollerDemo_OverrunCounter
+	inc ScrollerDemo_OverrunPanelIRQFlag
+	lda panelIRQDone
+	bne .l1
+	sta ScrollerDemo_OverrunCounter
+	sta ScrollerDemo_OverrunPanelIRQFlag
+
+	; Wait for the panel IRQ to be done
+.l1
+!ifdef EnableScrollerDemoWaitScorePanelHook {
+!ifdef Scroller_DisplayTitleScreen {
+	lda TitleScreen_Enable_ScrollerDemoWait_Hooks
+	beq .noHook2
+}
+	lda panelIRQDone
+	jsr ScrollerDemoWaitScorePanelHook
+.noHook2
+}
+	lda panelIRQDone
+	beq .l1
+	lda #0
+	sta panelIRQDone
+
+	; Debug
+;	lda ScrollerDemo_OverrunPanelIRQFlag
+;	sta VIC2BorderColour
+
+	rts
+
+
+!ifdef Scroller_MultiDirection {
+!source "Scroller.a"
+} else {
+!ifdef  Scroller_IsHorizontal {
+!source "ScrollerSingleH.a"
+} else {
+!source "ScrollerSingle.a"
+}
+!source "PlayerControl.a"
+!source "AnimationEngine.a"
+!source "LevelControl.a"
+!source "ScoreControl.a"
+!source "TitleScreen.a"
+!ifdef Scroller_PlaySoundEffectsDuringGame {
+!ifdef Scroller_PlaySoundMusicAndSoundEffectsDuringGame {
+
+; A lookup table that converts SEUCK SFX number to the music player envelope number
+; There are 24 SEUCK sound effects
+SEUCKToMusicSFX
+	!by 0 , 1 , 2 , 3 , 4 , 5 , 6 , 7
+	!by 8 , 9 , $a , $b , $c , 3 , 4 , 5
+	!by 6 , 7 , 0 , 1 , 2 , 3 , 4 , 5
+; A lookup table to allow each sound effect to have a different note
+SEUCKToMusicSFXNote
+	!by 48, 50, 32, 16, 32, 48, 52, 40
+	!by 48, 50, 32, 16, 32, 48, 52, 40
+	!by 48, 50, 32, 16, 32, 48, 52, 40
+SEUCKToMusicPriority
+	!by 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0
+	!by 0 , 0 , 50 , 75 , 15 , 0 , 0 , 0
+	!by 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0
+
+!source "SFXWithMusic.a"
+} else {
+!source "../SFX/SFX.a"
+}
+}
+}
+
+!source "ScrollerCommon.a"
+
+MarkEndCode = *

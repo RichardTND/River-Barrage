@@ -1,0 +1,873 @@
+; MPi: TODO: The main displayed area needs to mirror the first line of the score panel to improve the split.
+;		Can then move the multi-colour panel split change to inside the bitmap+ECM area and not have the FLD flickering bug
+
+
+; Stablised the score panel split for most cases. Sprites still cause some timing problems sometimes.
+
+
+.hitSomethingTyped was sometimes getting a recently, within the same frame, removed AnimationType of $ff from an enemy bullet that hit the player with a player bullet nearby.
+	This caused the recently removed enemy bullet to transform into a player dying animation.
+	Now animation type is checked in the collision routine.
+
+
+
+* Directional and directional hold animations are a lot better now.
+
+
+
+; When Scroller_NeedFullColourScroll is not defined then look at splitting the char scroll onto two frames, use the now vacant colour scroll time.
+; Can be done quite easily since they're split anyway.
+
+
+
+
+* Add code to handle the slightly less memory hungry full colour per char mode in "ExternalTools\CharPad 2.0 310715\Examples (CTM5)\Examples - Rips\Turrican 2 - 4x4\Turrican 2 L2-2.ctm"
+	Instead of a duplicate set of block data that contains colorus per block char cell, the colour mapping is on a per character basis, so constant for each character, not inside each block.
+	194 char's data at $14
+	colour mapping is at $624 at $14 + (numMapUsedChars * 8)
+	172 blocks at $14 + (numMapUsedChars * 8) + numMapUsedChars stride 2
+	170x48 map at $14 + (numMapUsedChars * 8) + numMapUsedChars + (numMapUsedTiles*4*4*2) stride 2
+	* Added CharColoursForEveryCharacter = 1
+
+
+
+
+* Avoid calling these functions during the title screen state
+	ScrollerDemoWaitMultiplexHook
+	ScrollerDemoWaitScorePanelHook
+	ScrollerDemoWaitTopIRQHook
+	* Added TitleScreen_Enable_ScrollerDemoWait_Hooks flag
+
+	
+	
+	
+* Consider using cartridge based speed code for unrolled screen scrolling code.
+	C:\Downloads\WinVICE-2.4.6-x86-r28113\WinVICE-2.4.6-x86-r28113\x64sc.exe +warp -cartcrt Citadel2.crt
+	Code and data would need to be re-arranged to account for $8000-$9fff being mapped at ROM sometimes
+		Cycles per char
+			Looping	4 + 4 + 2 + 3	= 13
+			Speed	4 + 4			= 8
+		Code size:
+			Looping:	ScreenScrollerCodeEnd - ScreenScrollerCodeStart = 2484 - 1c04 = 880
+			Speed:		40 * 20 * 8 * 2 * 6 = 12C00 (12C0 per bank per direction, so need 16 ROM banks for 8 way 2 banks)
+	ScrollerStrips has self modifying code so it's not a candidate
+	* Will need a common batch file for creating the relevant scroller binaries
+		* Can import values from the map
+	* and creating a crt image
+	http://codebase64.org/doku.php?id=base:crt_file_format#ocean_type_1
+	* bin\MakeCart.exe already supports larger carts with higher bank numbers
+	Added code to ScrollersNoColour.a to use +Scroller_ScrollExecCartBank
+	Adding scroller code into CartCode, this will then get added to a cart image
+		cd /d c:\Work\C64\Scroller\CartCode
+		..\..\acme.exe -o c:\temp\t0.bin ScrollerNoColour0To1_1.a
+		..\..\acme.exe -o c:\temp\t1.bin ScrollerNoColour1To0_1.a
+		..\..\bin\MakeCart.exe -n -b 9 -r c:\temp\t0.bin -c 0 0 $2000 -w -r -b 10 -r c:\temp\t1.bin -c 0 0 $2000 -w -b 11 -r c:\temp\t0.bin -c 0 0 $2000 -w -b 12 -r c:\temp\t0.bin -c 0 0 $2000 -w -o c:\temp\t.crt
+	** This will need changes to the IRQ hanlders, including the multiplexor, to allow their "rti" use to be changed to a "jmp MinimalIRQServiceRoutine" or similar IRQ exit routine.
+	* In Scroller\Scrollers.a ScrollBank*To*_* and ScrollColour_* routines also need +Scroller_ScrollExecCartBank additions
+	* First add code to make ProcessorPortDefault or ProcessorPortKERNALWithIO selectable in addition to ProcessorPortAllRAMWithIO for Scroller\ScrollEntryCommon.a.
+	* Then add code to handle the cart banking scrollers
+	* Added Scroller_UseKernal
+	** Screen score panel split IRQ entry timing needs adjusting by the cycles for the kernal routine at FF48
+		= cycles 3 + 2 + 3 + 2 + 3 + 2 + 4 + 2 + 3 + 5
+		== 29 cycles
+		ScorePanel1Quick
+		ScorePanel1
+	* Added automatic build for left/right directions using the CartCode source files
+	* Done - When Scroller_FullScreen is used with IRQOpenBorders the kernal NMI code needs to be added. Similar to Multiplex_IRQExit but use Multiplex_NMIExit
+	* Don't forget to seyup ScreenBTemp in BuildIt.bat for the colour scrollers
+	* Added automatic build for up/down directions using the CartCode source files
+	* Need diagonals... *sigh*
+	** Done 39
+	** Done -39
+	** Done 41
+	** Done -41
+
+
+
+
+* SEUCK Redux code enabled, with Scroller_UseKernal and when loading it from a cart doesn't work.
+	But the multi-directional scroll build with speed code does work with cart.
+	It looks like BASIC is being switched on when the title screen is displayed?
+		lda #Scroller_KillCartridgeBank
+		sta EASYFLASH_BANK
+		lda #EASYFLASH_CONTROL_KILL
+		sta EASYFLASH_CONTROL
+
+
+
+
+* Use the MakeCart -f option to more efficiently pack the speed code, since it is position independant code it can execute from anywhere in the cart's bank
+	Can also take into account the Scroller_MultiDirectionNoDiagonals flag to reduce the size of the data needed even further
+	Scroller_ScrollExecCartBank can also use cart access macros or common code from EasyFlash_Code.a
+
+	
+	
+* Narrow the split, to increase score panel space or increase screen draw space.
+	* Debug by adding the ability to force Y position offsets and frameScrollY updates for range testing
+	Added Multiplex_DefaultPatternYPosTweak and Scroller_DebugSplit
+
+
+
+
+* Added Scroller_DiscardMinSpriteYPos : Set this to allow the AnimationUpdateMultiplexor to skip sprites above this limit
+
+
+
+
+*	@47/205
+	> d011 17
+	@ 34/256
+	> d011 13
+	Screen height is not changed, causing the score panel to be displayed one char line earlier
+
+
+
+; For map types where each character is mapped to a specific colour (block colour data is *not* duplicated in the block data)
+; then the side colour update can be a fast unrolled section of code that does a lookup based on the screen data that will be switched to.
+; This means the colour block plot doesn't need to do so much work.
+	* Added Scroller_EnableBlockColourSpeedCode
+
+
+
+
+* If Scroller_EnableSpeedCode and Scroller_EnableBlockColourSpeedCode is enabled then make sure the Scroller_EnableBlockColourSpeedCode enabled strips code is removed from RAM into ROM only
+	Added calculated Scroller_EnableBlockColourSpeedCodeInCart
+
+
+
+* Using the MakeCart +! option to force memory location $8000
+
+
+
+* Update to use GMod2, 8KB banks
+	* Different cart boot code, use runstop to cause it to do a normal boot
+	* The speed code scrollers might need splitting, into their separate top/bottom half routines, to squeeze them into 8KB banks instead of 16KB banks
+
+
+
+* Added ScrollerStripsCodeSize/Start/End to aid debugging
+
+
+
+
+* Unroll the block plotting code for characters
+	* A bit like the code for Scroller_EnableBlockColourSpeedCode
+	* Also put this code in the cart banks if Scroller_EnableSpeedCode is enabled and remove from RAM
+	* Tricky because the block data can be under the cart ROM that is banked in...
+	Before with no debug colours: ScrollerStripsCodeSize  =$5cf
+	* Done - DataCheck.a - Use this to check for all the externally referenced data
+	* Done - Split into ScrollerStripsTop/Bottom/Left/Right.a to prepare for Scroller_EnableBlockStripsSpeedCodeInCart versions later
+	* When Scroller_EnableBlockStripsSpeedCode then unroll bottom/top/right/left versions
+		Done - MACROScrollerDrawHStripUnrolled + top + bottom
+		Done - MACROScrollerDrawVStripUnrolled + left + right
+	* Create Scroller_EnableBlockStripsSpeedCodeInCart like Scroller_EnableBlockColourSpeedCodeInCart
+		Add extra Scroller_EnableBlockStripsSpeedCodeInCart option that is activated with Scroller_EnableSpeedCode like that used for Scroller_EnableBlockColourSpeedCodeInCart
+	* When Scroller_EnableBlockStripsSpeedCodeInCart assemble the unrolled code separately
+		Make sure used variables/defines are extracted by sed in BuildIt.bat
+
+
+
+
+* When Scroller_LinkedPlayers
+	Then for player 2 direction consider using the player 1 veloxity to direction.
+		Around PlayerControl.a:.ignoreCollision
+			ldx .playerInformation+PlayerGameOffset_TargetVelX
+			ldy .playerInformation+PlayerGameOffset_TargetVelY
+		Read the above from +MACROPlayerControl Player2Information
+		Or perhaps just before:
+			ldx .playerInformation+PlayerGameOffset_AnimationIndex
+		Use: Player1Information+PlayerGameOffset_AnimationIndex
+			lda AnimationDirectionIn,x
+		instead of the jsr AnimationConvertXYToDirection
+	* Added Scroller_LinkedPlayersAnimations
+
+
+
+* Added support for sprite expansion options
+	Global_SpriteExpandX = 1
+	Global_SpriteExpandY = 1
+
+
+
+
+* Done - Consider making EnemySpriteYPosToScreenCharPosLo/EnemySpriteYPosToScreenCharPosHi from Citadel2 a common set of data and supprting routines/macros to aid sprite to background collision detection
+		* SpritePosToScreenPosMacros.a SpritePosToScreenPosMem.a SpritePosToScreenPosMem2.a
+	* Add some simple player fall/run/jump control tests with the multi-directional example
+		* Use Scroller_RunJumpDemo = 1
+	* Add suitable camera movement which is push scroll based, but tries to align diagonal scrolling with the center of chars.
+		* The scroll will favour re-centering/aligning the scroll to a middle of a char. So for example if the scroll is to the left/right and no vertical scroll then align the Y scroll to the middle.
+			Keep the idle axis in the middle of the char
+	* MSpritePosToCharacterLookup could do with a passed in adjustment for xpos/ypos that uses some slightly different code if the values are != 0
+	* Figure out some non-magic values for the box edges for "Simple push camera calculations"
+	* Added CharEffects.a for player character bullet example code
+
+
+
+* For CharEffects.a BeforeScrollers and AfterScrollers optimise the transversal through the list by having two optimised link lists of indexes
+	* One used and one free linked list
+	* So when there are no bullets then there is virtually no time taken
+	** Done - Create automated jotstick inputs that run to the right and then jump over the gap
+		Tweak it until the frame overruns
+		Identify the expensive operations
+		Optimise, most probably by tweaking the camera movement to avoid the situation where every frame is doing a full screen/colour scroll
+		See timings with Scroller_RunJumpDemo_RunJumpTest and Scroller_DebugColourScrollTimings and Scroller_DebugScreenScrollTimings
+
+	Note define: Scroller_RunJumpDemo_RunJumpTest
+	** Done - Will need an on-screen frame display, utilising the characters for the score. This is so that Vice breakspoints and single step frame in pause mode can be tracked
+	* Frame:
+		259		Start of screen diagonal movement. Note how char/col scrolls occur every frame without any free time
+		283		Indicates visible screen corruption as the chars and the colour copy overruns, so the colours are one frame behind the chars
+				Note how the green/lightgreen portion is within the visible area of the screen timing
+	frameScrollX	frameScrollY
+	frameTargetVelX	frameTargetVelY
+
+	Testing the first jump right at frame 259-
+		Note new code around: ; Double check we are not going to cause bad screen scrolls with certain alignments
+		Success! This delays the diagnoal scroll, by removing the frameTargetVelX (due to frameScrollY==0 indicating the Y scroll just happened), until the next frame
+		This aligns the diagonal movement for -2,2 until the chars scroll is synchronised!
+	** This needs to be made more generic, perhaps a table of velocities and scroll values?
+		* Investigate using a "just scrolled character or colour" flag, this then simplifies the "does the current X/Y movement cause a char scroll within 2 frames" test.
+			Added frameIsBusyScrolling
+	* Added more tests for "Double check we are not going to cause bad screen scrolls with certain alignments"
+	* When scrolling down right or up left the alignment is different, so different checks will be needed
+
+
+
+* Re: Scroller_DoMusicUpdateInIRQ
+	* ; DO NOT USE UNTIL split timing and cart bank selection issues are sorted out
+		BottomBorder3 and ScorePanel2 need extra sty/ldy irqYStore which could scren with the nicely tweaked horizontal splits
+
+
+
+
+* Flag when the score panel wait did not actually wait. Then use that to delay the forced colour scroll by a frame. This will produce a stop of the scroll until the timing is conducive to a flicker free update with synchronisation to the raster.
+	But ScrollerCalculate will calculate frameScrollX (or Y), especially if frameScrollMoveColours and use frameScrollPreCalcX, before the overrun problem is detected for the colour scroll
+	So to be absolutely sure of the colour update happening is hard
+	* Thoughts for Citadel2: Check that ScrollerCalculate will flag to the other routines, like the memory defrag, that they should not happen when busy.
+		Checks the busy flags are only reset when the next ScrollerCalculate is called and after the char/colour scrolls are definitely done
+		Check if the "Wait for the top interrupt to happen" is late. If this is late and a char/colour scroll has not happened, perhaps this implies a frame overrun better and then the intended scroll can be blocked by ScrollerCalculate?
+	* Added ScrollerDemo_OverrunTopIRQFlag
+	* Added frameMovedScreenOrColours
+	* Another thought:
+		In ScrollerCalculate
+		Where: ; Use whatever values were calculated the previous frame
+		If ScrollerDemo_OverrunPanelIRQFlag is added and detected then can we effectively delay the colour scroll there, to avoid the situation where the colour scroll doesn't have enough time?
+		* Hmm, ScrollerDemo_OverrunPanelIRQFlag seems to trigger quite often even without a scroll, probably because the bottom IRQ and sort it taking quite some time
+			So it's not going to be useful
+	* After some experimentation with "; Debug profiling raster position for colour scroll trigger"
+		Without shooting lots of player bullets, the scroll colour behaves itself even when triggered VIC2Raster <= $84
+		But VIC2Raster ~> $b0 the scroll will definitely flicker
+		* Added Scroller_ColourScrollRasterAbortLevel, this seems to fix the issue really well!
+			Also fixes the trap spawn room stress test in Citadel 2
+
+
+
+
+
+; Enemy aimed fire to target both players when they are active. Alternate fire, or nearest enemy to player fire mode.
+Player1Information or Player2Information is used depending on the active players
+
+
+
+* Created ScrollEntry_SEUCK.a and ScrollEntry_MultiDirection.a that are included by ScrollEntry.a
+	This avoids me needing to continuously tweak all the options for each build type
+
+
+
+* Potential bug in the static level redraw back in the map, test case using a modified Transputerman (SEUCK game 3) in C64\SEUCK\tstlvlrwedraw .i
+	The later levels jump backwards through the map with a redraw, in SEUCK the same enemies should respawn, this code should do the same
+	* Done see "; Test for still (static) level redraw tweak"
+
+
+
+* If IRQOpenBorders was being used then BottomBorderLessTime was not saving the X register and restoring from some other value, oops.
+
+
+
+
+* Scroller_FullScreen with Scroller_UseKernal and IRQOpenBorders needs to have its timing adjusted for BottomBorder*
+	Also: ScrollerNMI1 and Scroller_NMITimerAdjust
+	Top border done
+	Bottom border is proving tricky
+	All below timings are with debug border colour change
+	* Timing without kernal (w store d011) no sprites, frameScrollY = 0
+		lin 002 cyc 009 = %01110000
+		lin 055 cyc 024 = %00010000
+		lin 245 cyc 011 = %01111011
+		lin 250 cyc 026 = %11110011
+		lin 263 cyc 041 = %01110011
+	* Timing without kernal (w store d011) all sprites top and bottom borders, frameScrollY = 0
+		lin 002 cyc 010 = %01110000
+		lin 055 cyc 031 = %00010000
+		lin 245 cyc 019 = %01111011
+		lin 250 cyc 033 = %11110011
+		lin 263 cyc 042 = %01110011
+	* Without BottomBorderLessTime, all sprites and no sprites seems stable for frameScrollY = 0-7
+		So remove BottomBorderLessTime
+	* What cabout the score panel timings, can ScorePanel1Quick be removed?
+	* Timing without kernal, frameScrollY = 0, no IRQOpenBorders, with ScorePanel1Quick
+		lin 001 cyc 014 = %00010000
+		lin 207 cyc 011 = %01111111
+			raster 207 = %11001111 = So forces a bad line
+		lin 215 cyc 012 = %00011111
+			raster 215 = %11010111 : Another bad line
+	* Timing without kernal, frameScrollY = 0, no IRQOpenBorders, without ScorePanel1Quick
+		lin 001 cyc 013 = %00010000
+		lin 207 cyc 020 = %01111111
+		lin 215 cyc 059 = %0001ffff6644
+		Seems stable
+	* When IRQOpenBorders, add a scorePanelPos2 check to BottomBorder2
+	* Timing without kernal (w store d011) all sprites and no sprites top and bottom borders, frameScrollY = 0-7
+		lin 002 cyc 007 = %01110000
+		lin 055 cyc 027 = %00010000
+		lin 245 cyc 021 = %01111011
+		lin 250 cyc 044 = %11110011
+		lin 263 cyc 041 = %01110011
+		Seems stable
+	* Using sprite combinatons and "Uses the joystick to manipulate frameScrollPos values" with fire to cycle the Y scroll pos:
+		* With and without debug border colour change
+		* all non-kernal IRQOpenBorders appear stable
+		* all non-kernal score panel scrolls appears stable
+
+
+
+* Bottom open borders split and top panel split with kernal still wobbles without sprites on some Y scroll values, check timing...
+	Does not need more Scroller_IRQRasterAdjust, causes flickering.
+	Might need a quick routine...
+	Without kernal, when frameScrollY=6 the line flickers to one row down, so use topScreenScrollYUsedIRQ
+
+
+
+; MPi: TODO: Add configuration to shift the screen split down one or two characters giving different size bottom areas.
+; Things to tweak: scorePanelPos1 , (19*40) and (20*40) will need to be optionally enabled, MACROScrollerBottomAdjust , MACROScrollerDrawVStrip, MACROScrollerDrawVStripColour, ScrollerDrawStripBottomBank,
+; ScrollerDrawStripBottomColour, DrawMap
+; InitBank0Data and ClearGameScreens where it copies the screen lines at 20*40
+	* Added: Scroller_AdditionalCharLines
+	* Added: Scroller_ColourScrollRasterAbortLevelFrame to stop constant detected overruns from endlessly pausing the colour scroll
+	* Done: ScrollersNoColour.a - WinMerge helps here a lot
+	* Done: Scroller_FullScreen in CartCode/Scroll_*.a
+	* TODO: BlockColoursForEveryCharacter will work, but the score panel edges are affected by the colour scroll... "Optimise, we don't want to draw a while block strip, however"
+
+
+
+
+* For numerous build configs, consider using something like this to generate screenshots at various cycle counts:
+	C:\Downloads\WinVICE-3.1-x86-r34062\WinVICE-3.1-x86-r34062\x64sc.exe -autostartprgmode 1 +autostart-delay-random +VICIIdsize +VICIIdscan -VICIIborders 2 -VICIIfilter 0 +sound -warp -remotemonitor -exitscreenshot c:\temp\t.png -limitcycles 6000000 C:\Work\C64\Scroller\Scroller.crt
+	* Something like: DebugFrames.bat
+		It could do with parameters for the starting cycle number, number of frames, and input prg/crt
+	* Or start in remote monitor mode with: C:\Downloads\WinVICE-3.1-x86-r34062\WinVICE-3.1-x86-r34062\x64sc.exe -autostartprgmode 1 +autostart-delay-random +VICIIdsize +VICIIdscan -VICIIborders 2 -VICIIfilter 0 +sound -warp -remotemonitor
+		Then attach to 127.0.0.1 6510
+		Use monitor commands:
+			attach "c:\work\c64\scroller\scroller.crt" 20
+			reset
+			break 13e9 (.afterScrollerDemoWaitTopIRQ)
+			scrsh "c:\temp\t.png" 2
+		* This gives more control and avoids the need to run the emulator a lot of times to get consecutive screen shots
+		* See Scroller\features\VerifyByScreenshots.feature
+
+
+
+
+* For Scroller_RunJumpDemo split code out
+
+
+
+
+* Trying to solve the "sprite will pop on if it's within a few pixels of the screen split issue"
+	Multiplex_DiscardSpritesYPos needs to be expanded to add Multiplex_DiscardSpritesYPosForSort
+	Interestingly Multiplex_DiscardSpritesYPosForSort can be used in Multiplex_Sort and the issue is fixed
+	Usage of Multiplex_SetDiscardPosition will need to be updated to include proper SetupIRQs.a calculated discard values and to include Multiplex_SetDiscardSpritesYPosForSort
+
+
+
+
+* Optionally unroll Scroller_ScrollSprites
+	Scroller_EnableScrollSpritesSpeedCode = 1
+
+
+
+* Added MStackConsistencyCheck_AX
+
+
+* Added ScrollerDemoMainline_ExitHook
+
+
+
+; MPi: TODO: If not IRQOpenBorders then IrqTopOfScreen does not need to be at raster pos 0, it can be moved downwards to just before the first sprites are needed
+; MPi: TODO: Perhaps not the best idea since any games that wait for BeforeScrollers/AfterScrollers for their work will want to have as much time above for animation and sprite updates
+	> Added optional IrqTopOfScreenPos to be defined by ScrollEntry_*.a
+
+
+
+* Added Scroller_CountMusicUpdateInIRQ
+
+
+* Moved "jsr ScrollerDrawStripTopColour" to the middle of the colour scroll
+
+
+
+
+* Title screen when using TitleScreen_AnimatingSprites, there is a single frame flicker
+	Probably to do with the top of screen multiplex raster IRQ position
+		> Nope
+	Might be something to do with the animation update code then?
+		> TitleScreenAnimationHook
+			Maybe the raster time for adding two sprites is just too high?
+		>> Added TitleScreen_SpriteAnimateCount2 to offset new sprites by 8 frames (half the shift value) which reduces sort overhead. Also looks better.
+
+
+
+
+* Scroller_NTSC = 1 enables NTSC code tweaks
+	Music speed and frequency table is an issue. Would need dedicated new music.
+
+
+
+* SEUCK: Player should spawn one frame after the enemies spawn
+* SEUCK: Animations should be processed for one frame after spawning
+	Enemy and enemy bullets and player bullets, apparently.
+	>> No. I want the first frames to be visible after being spawned.
+
+
+
+
+* Make horizontal SEUCK right to left, not left to right
+	>> All monitor commands are collated into: C:\Work\DebuggingDetails\SEUCK Scroll left.txt
+	>> Replacement version with splash screen from original disk: Sideways-Scrolling-SEUCK-PAL.prg
+		bk 19d8
+		l "C:\work\c64\SEUCK\Sideways-Scrolling-SEUCK-PAL.prg" 0
+		g 80d
+		bank ram
+		> bc22 ea ea ea
+		s "c:\work\c64\seuck\sideways left bc00.prg" 0 200 ffff
+		l "c:\work\c64\seuck\sideways left bc00.prg" 0
+		This allows the "g bc00" to work from reset C64 state
+		> 1 34
+		c:\work\c64\bin\LZMPi.exe -c64mu "c:\work\c64\seuck\sideways left bc00.prg" "c:\work\c64\seuck\sideways left.prg" $bc00
+
+		t ef98 efe7 ef70
+		To update the message:
+			> efc4 "SCROLL LEFT CODE BY MARTIN PIPER"
+			Then OR bytes at efc4-efe3 with $80
+		> efc4 d3 c3 d2 cf  cc cc a0 cc  c5 c6 d4 a0  c3 cf c4 c5  a0 c2 d9 a0  cd c1 d2 d4  c9 ce a0 d0  c9 d0 c5 d2
+	
+	> Note docs on recovering the editor: https://www.c64-wiki.com/wiki/S.E.U.C.K.#Cheats
+		POKE 16964,1 runs the SEUCK editor by pushing the SPACE  in a running SEUCK game.
+		POKE 16964,0 makes the game in the editor stop returning back to the editor.
+		SYS 16595 starts the SEUCK game.
+		SYS 24576 runs the SEUCK editor.
+		Note, using test game->proper test, seems to start code at $40ca which quickly tests for $2444 = 16964, which corresponds to the poke above, and then sets that to be 1
+		24576 = $6000
+		
+	>> "C:\work\c64\SEUCK\breakthr. demo.prg"
+		After what looks like unfreeze code, the entry point seems to be: $840
+			  ADDR A  X  Y  SP 00 01 NV-BDIZC LIN CYC  STOPWATCH
+			.;0840 0a 38 05 a3 2f 15 00100101 271 029    5913902
+		>> Enemies will need to be deleted since they scroll off the left edge...
+		>> Note: This version has broken "save final game" code.
+
+
+	$729c is the editor map draw
+		Change the 5/6 stores, which are x/y
+			> 72a1 0
+		$72d2 change to clc/adc/cmp #$28
+			a 72d2
+				clc
+				adc #5
+				sta 5
+				cmp #$28
+
+
+	$71f6 the $7856 looks like the selection column from the editor
+		bpl and cmp #8 at 71f9 and 7218
+		$7858/$7859 map pos
+
+	Swap the inc/dec map pos code
+		INC $7858
+		BNE $7206
+		INC $7859
+		JSR $2B89
+
+		LDA $7859
+		ORA $7858
+		BEQ $7234
+		DEC $7858
+		LDA $7858
+		CMP #$FF
+		BNE $7234
+		DEC $7859
+
+
+		a 71fe
+			lda $7859
+			ora $7858
+			beq 7215
+			dec $7858
+			lda $7858
+			cmp #$ff
+			bne $7215
+			dec $7859
+
+
+		a 721f
+			inc $7858
+			bne $7227
+			inc $7859
+			jsr $2b89
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+			nop
+
+		
+
+	Editor map block place?
+		w store 900
+		$729a sta ($07),y
+		Columns need altering
+		JSR $2A2E is the map address calculation
+		chis 30 shows $2b6f alters the column with a 7-column calc using $7856? But the result isn't used?
+
+		a 2b6f
+			lda $7856
+			nop
+			nop
+			nop
+
+
+	Saved "c:\work\c64\seuck\sideways left 44c.prg"
+		Use:
+			bank ram
+			l "c:\work\c64\seuck\sideways left 44c.prg" 0
+			g 44c
+
+
+	Game map read $2b17
+		$2b00 looks like the game full screen map draw
+		Which reads the map backwards
+		$4887 is the block draw using $07/$08 which starts at $ec00 or $e800
+			Which is inited by $47bf
+			And draw columns
+			> Perhaps start at the right hand column and work to the left?
+				>> Adjust the start position to the last right hand column
+					> 47c0 23
+			> $2b3e adjusts to the top of the next column
+				>> Adjust the coordinate backwards
+					> 2b42 ed
+
+
+	Screen scroll routines
+		* Also used by the "insert enemy" editor function, when smooth scrolling
+		$26db to $2963
+		Used routines:
+			26f3
+			270b
+			2723
+			273b
+			2753
+			276b
+			2783
+			279b
+			27b3
+			27cb
+			27e3
+			27fb
+			282b
+			2843
+			285b
+			2873
+			288b
+			28a3
+			28bb
+			28d3
+			28eb
+			2903
+			291b
+			2933
+			294b
+			26db
+		And... 0890 08b4 8d7
+		> Note the segmented scroll across many frames
+		C:\work\c64\SEUCK\Sideways scroll fix1.a
+		C:\work\c64\SEUCK\Sideways scroll fix2.a
+		..\acme.exe -f cbm -o c:\temp\t1.prg "C:\work\c64\SEUCK\Sideways scroll fix1.a"
+		..\acme.exe -f cbm -o c:\temp\t2.prg "C:\work\c64\SEUCK\Sideways scroll fix2.a"
+		..\acme.exe -f cbm -o c:\temp\t3.prg "C:\work\c64\SEUCK\Sideways scroll fix3.a"
+		Since it is copying from onscreen to offscreen then the adjustment pattern can be:
+			+1
+			-1  because of the dey and bne
+		Note $2813 is a jmp which is used for code in: Sideways scroll fix3.a
+			And this changed in some versions of sideays SEUCK. Code found in the old Sideways.vsf in $800-$8ff has been variously relocated since is was causing the "save finished game" to crash.
+			And the jump at $2963
+
+		l "c:\temp\t1.prg" 0
+		l "c:\temp\t2.prg" 0
+		l "c:\temp\t3.prg" 0
+
+		Colour?
+			$298a colour stores with Y coming from $297d ldy $0400,x
+			With X: 0 6 c 12 etc up to #$30
+			$0400 looks like a "column" and then 5 colour entries, times 8 entries (40/5)
+			>> What stores into $0400 $0406 etc?
+				Code at $497b and $2a73 needs to be dec, change ee to ce
+					> 497b ce
+					> 497e ce
+					> 4981 ce
+					> 4984 ce
+					> 2a73 ce
+					> 2a76 ce
+					> 2a79 ce
+					> 2a7c ce
+				$499d needs the test updated to be #$ff
+					> 499e ff
+				$49a1 needs to be #$27 and the sta $06 needs to be 0 not #$27
+					> 49a2 27
+					a 49c2
+					lda #0
+					sta $06
+
+				$2b0c inits $0400 etc, what is $10? The right hand column...
+				$2b08 needs to be the left hand edge of the last column... #$23
+					> 2b09 23
+				$2b5f ... which gets updated with clc/add #5
+					a 2b5f
+					sec
+					sbc #$05
+
+			Horizontal smooth scroll needs to be inverted
+				OLD: > 885 7
+				New? Not triggered: > 1985 7
+				New:
+					> 4902 7
+
+
+
+	Edge map read $49cf while scrolling
+		w load 950 waits for some scroll to happen
+	Screens at $e800 and $ec00
+		$2acd looks like the edge print?
+		* To print on the right hand edge
+			> 2aa1 27
+		* $03 seems to be the block column? Which currently goes backwards from 4 to 0 observed every column draw at $2aa0
+			Which adds at $2ac1
+			$2a80 does some calculation for $03
+			Which comes from #$4 - $4091 then...
+				Needed: > 2b42 ed
+
+			a 4951
+				ldx #$27
+				stx $1e
+				lda #$04
+				sec
+				sbc $03
+				sta $03
+				rts
+
+			a 2aa0
+				jsr 4951
+				nop
+
+
+
+	** Saved and compressed
+
+
+
+	Insert enemy
+		Old: >> Need to delete existing enemies
+		The rough joystick directions are also inverted
+			Since: $2A2E is the map address calculation
+			And $727a uses $408f $4090 as the input to $2a2e
+			What updates $408f/$4090?
+			Uses:
+				89de  AD EA 8A    LDA $8AEA          - A:01 X:00 Y:00 SP:b1   -    C
+				89e1  85 08       STA $08            - A:00 X:00 Y:00 SP:b1   -   ZC
+				89e3  8D 90 40    STA $4090
+				89f3  AD E9 8A    LDA $8AE9          - A:00 X:00 Y:00 SP:b1   -   ZC
+				89f6  8D 8F 40    STA $408F          - A:0b X:00 Y:00 SP:b1   -    C
+			What updates $8AE9 $8AEA?
+				$89a1 A = control bits
+				Two routines: $89a7-$89b1 and $89c2-$89d7 needs to be swapped
+				Using stack memory at $0100 as temp storage:
+				t 89c2 89d7 0100
+				t 89a7 89bc 89c2
+				t 0100 0115 89a7
+			$a028 is the joystick read which returns $64f9?
+
+		The fine joystick direction also needs to be opposite
+			During the fine loop, $8a76 seems to test?
+				$8a7d triggers on fire...
+				$8a87 triggers on left only... Which relies on $31 == 0, what stores into $31?
+					This seems to test for input left: 8a80  20 C5 8A    JSR $8AC5
+						h 0 ffff 20 c5 8a
+							8a80
+						So used only once
+				> 8acd 8
+
+		The enemy push scroll edge test needs to be the other edge
+			In attack wave edit loop: $8ef6 = jsr $a028 which is read input
+			$8f0a triggers on input direction, A = direction $1b = left only
+				$8f11 lda $e774,x seems to be joystick to direction lookup
+				sta $4089	 = Direction result
+				$8f23 = border flash for memory limit
+			After rough, after start pos, a previous bk 8ef6 shows that the push test with the left screen edge is already done
+				What is the fire test in start pos?
+				$8e68 is an input read jsr $a028
+				>> $8ec0 triggers on fire
+					Just single step through code until bk 8ef6, to find the push scroll...
+						Ignoring lots of $4094 $4097 tests which seems to be updated by IRQ?
+							Like at $8f6a
+				>> $8f6a is after the start pos is set, but before the scroll...
+					8f6a is in the middle of a loop that goes around 8 times? Due of $8f62
+					$8f64 A = loop count
+						If the enemy is placed all the way off the left, then when A=7 then the scroll happens...
+							** While debugging, is $2b9b (X index) the animation scroll move code? $2baf is a Y index version? $bc01 is the animation table?
+								$2be9 and $2bfd is a non-index version?
+									(C:$60ca) h 0 ffff 20 fd 2b
+									4e0c
+									(C:$60ca) h 0 ffff 20 e9 2b
+									4afd
+								> Triggered when push scrolling
+						$514f seems to be reading the position? $5168 seems to be a right position test?
+						$58c5? $58f2?
+				>> $8eb2 seems to be the shifted X pos store to $e771
+					$63e1 read input?
+				$2bdf?	2bdf  C9 1C       CMP #$1C
+					Triggers after an input move...
+				a 2bdb beq 2be3
+
+				a 2bdf cmp #$30
+					bcs 2be6
+				
+				a 2b9e sec
+					sbc #$01
+				
+				a 2ba4 bcs 2bae
+
+				a 2bb2 sec
+					sbc #$01
+				
+				a 2bb8 bcs 2bc2
+				
+				a 2bec sec
+					sbc #$01
+					
+				a 2bf2 bcs 2bfc
+				
+				a 2c00 sec
+					sbc #$01
+				
+				a 2c06 bcs 2c10
+				
+
+
+				
+	Player push scroll edge test needs to be the other edge
+		See: PlayerOffset_LeftStopLo in redux $409d $409e
+		$4bc3 code
+		$2bc3
+		$2bc5 triggers on left hit
+		$5dc5 is flag for edge hit? Yes!
+		Instead of $409d/$40b0 two byte value tests for the left edge, it needs to be on the right edge two byte value at $40a0/$40b3
+		So remove the $5dc5 at $2bc8 and squeeze a similar routine at $2bc3 plus a few bytes... ($2bc9) And call it at $4be6 which is the right edge update
+		
+		a 2bc3 bcc 2bc8
+		
+		a 2bc8 rts
+			sta $bc01,x
+			inc $5dc5
+			rts
+		
+		a 4be6 jsr 2bc9
+		
+		a 4ef3 jsr 2bc9
+		
+		
+
+
+	Player default fire direction
+		See: PlayerOffset_Directional
+			$409d + $b = $40a8
+			and $40bb for player 2
+		Code at $4cc6 $4fd2
+			
+		note two eor #$02
+			Should be eor #$01
+			h 200 ffff 49 02
+			$4cd0 $4fdc
+		
+		> 4cd1 1
+		> 4cd3 1
+		> 4fdd 1
+		> 4fdf 1
+		
+
+	Enemy and bullet scroll direction
+		Done above... 2b9b etc
+
+
+	> The original SEUCK (not sideways) displays at splash screen with code starting at $bc00
+		This code is missing from other versions with more data in them
+		> Done with the new original disk version: Sideways-Scrolling-SEUCK.d64
+
+
+
+	* Does saving a complete game backup the extra code in $400?
+		Tape and disk?
+		Currently, all my sideways versions (vsf and prg) crash when trying to save the finsihed game, with tape or disk.
+		Resolved. Located the original disk version with splash screen.
+			"C:\work\c64\SEUCK\Sideways-Scrolling-SEUCK.d64"
+			"C:\work\c64\SEUCK\Sideways-Scrolling-SEUCK-PAL.prg"
+			$19d8 seems to be the logo display entry after decompression...?
+				Which seems to be in the middle of a freeze?
+				Tracing backwards the real code seems to start at $bc00?
+				g bc00 actually shows the normal SEUCK screen without the "sideways" credits.
+				ICU64 shows two screen at $e800 $ec00 showing the normal SEUCK and the extra sideways credit screen.
+				>> It looks like the sideways displayed screen was frozen, hand edited, then saved out!
+			Stepping through the $bc00 init to find what replaces the screen data, to see if it can be easily disabled.
+				>> bc22   20 0E 62   JSR $620E
+			To remove the screen refresh:
+				> bc22 ea ea ea
+		* Need to find some free memory above $900 to replace the "a 454"
+			h 200 ffff ea ea ea ea ea ea ea ea ea ea ea ea
+			Candidates: 2966 44f7 4951 8689
+			Candidates: 2966 4951 8689
+				>> Used: 4951
+
+
+	** Saved and compressed
+
+
+	* What about default fire for enemies that are not moving? Original SEUCK fired upwards...
+		An enemy that is placed with "directional" fire that has not moved, still shoots upwards.
+
+	* Update redux code...
+		See: Scroller_IsHorizontalLeft
+
+
+* Using BRKTHRLF.P00 the coloured blocks seems to have a syncronisation issue with the border chars compared to the "sideways left.prg"
+	Check the map blocks are scrolling in correctly...
+	Or maybe it is the striped colour RAM copy being the issue...
+	> BRKTHR2L.P01 shows this very well... It is the colour RAM strip copy
+
+00:00 Introduction
+00:15 Scrolling to the left rationale
+01:13 Debugging overview and plan
+03:15 Trying to find the code entry point
+03:45 It looks like freezer code
+08:18 The old sideways SEUCK
+10:41 Edit background fixes
+15:10 Placing map block fixes
+23:29 Game map draw fixes
+31:50 Game smooth scroll fixes
+52:23 Insert enemy fixes
+01:09:66 Sprite scroll move fixes
+01:14:03 Player push scroll fixes
+01:21:36 Player shoot direction fixes
+01:24:30 Demo game in SEUCK and new code

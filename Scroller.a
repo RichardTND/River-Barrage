@@ -1,0 +1,1744 @@
+;Multi-directional scrolling routines
+
+frameWantScrX			!by 0
+frameWantScrY			!by 0
+frameTotalScrScroll		!by 0
+frameScrollMoveColours	!by 0
+frameIsBusyScrolling	!by 0
+frameScrollPreCalcX		!by 0
+frameScrollPreCalcY		!by 0
+frameScrollPreCalcXVel	!by 0	; The velocity used for this movement
+frameScrollPreCalcYVel	!by 0	; The velocity used for this movement
+frameScrollOldX			!by 0	; Pixels
+frameScrollOldY			!by 0	; Pixels
+
+!ifdef Scroller_RunJumpDemo {
+scrollMapHX	!by $00		; Block pos in map
+scrollMapLX	!by $00		; Char pos in block (0-3)
+scrollMapHY	!by $02		; Block pos in map
+scrollMapLY	!by $00		; Char pos in block (0-3)
+frameScrollX			!by 4	; Pixels
+frameScrollY			!by 4	; Pixels
+} else {
+scrollMapHX	!by $00		; Block pos in map
+scrollMapLX	!by $00		; Char pos in block (0-3)
+scrollMapHY	!by $00		; Block pos in map
+scrollMapLY	!by $00		; Char pos in block (0-3)
+frameScrollX			!by 0	; Pixels
+frameScrollY			!by 0	; Pixels
+}
+
+; These are updated during the offscreen (screen flip) phase, which gives the most accurate position
+; Combined with scrollerRealMovementXPixels, scrollerRealMovementYPixels, frameScrollX, frameScrollY these give non-lagged values that can be used during Scroller_CallbackBeforeCharScreenScroll and UpdateSprites
+scrollRealMapHX	!by $00		; Block pos in map
+scrollRealMapLX	!by $00		; Char pos in block (0-3)
+scrollRealMapHY	!by $00		; Block pos in map
+scrollRealMapLY	!by $00		; Char pos in block (0-3)
+
+; Inverted values, used for some calculations
+scrollRealMapLXInv	!by $00		; Char pos in block (0-3)
+scrollRealMapLYInv	!by $00		; Char pos in block (0-3)
+
+frameMovedScreenOrColours	!by 0
+
+!zn {
+ScrollerInitVariables
+	lda #0
+	sta frameWantScrX
+	sta frameWantScrY
+	sta frameTotalScrScroll
+	sta frameIsBusyScrolling
+	sta frameScrollMoveColours
+	sta frameScrollPreCalcX
+	sta frameScrollPreCalcY
+	sta frameScrollPreCalcXVel
+	sta frameScrollPreCalcYVel
+	sta frameScrollX
+	sta frameScrollY
+	sta frameScrollOldX
+	sta frameScrollOldY
+	sta scrollerRealMovementXPixels
+	sta scrollerRealMovementYPixels
+!ifdef Paralax_Enable {
+	sta paralaxScrollXPixels
+	sta paralaxScrollYPixels
+}
+	sta scrollMapHX
+	sta scrollMapLX
+	sta scrollMapHY
+	sta scrollMapLY
+
+	sta topScreenScrollX
+	sta topScreenScrollY
+
+	jsr ScrollerUpdateRealCoordinates
+	rts
+}
+
+!zn {
+ScrollerInitTables
+	; Sort out the map table based on map width
+	ldx #0
+	lda #<(MapData+2)
+	sta tempWork0
+	lda #>(MapData+2)
+	sta tempWork1
+.fma1
+	lda tempWork0
+	sta MapTabL,x
+	lda tempWork1
+	sta MapTabH,x
+	lda tempWork0
+	clc
+	adc MapData
+	sta tempWork0
+	bcc .over2
+	inc tempWork1
+.over2
+	inx
+	bne .fma1
+	rts
+}
+
+!zn {
+
+ScrollerUpdateRealCoordinates
+	lda scrollMapLX
+	sta scrollRealMapLX
+	lda scrollMapHX
+	sta scrollRealMapHX
+	lda scrollMapLY
+	sta scrollRealMapLY
+	lda scrollMapHY
+	sta scrollRealMapHY
+	lda #3
+	sec
+	sbc scrollRealMapLX
+	sta scrollRealMapLXInv
+	lda #3
+	sec
+	sbc scrollRealMapLY
+	sta scrollRealMapLYInv
+	rts
+
+
+
+!ifdef Scroller_DebugSplit {
+.debounce !by 0
+}
+; To be called as one of the first functions in the frame. Can be called even if the screen is being displayed.
+ScrollerCalculate
+
+!ifdef Scroller_DebugSplit {
+	lda #JoystickBits_Fire
+	bit CIA1KeyboardColumnJoystickA
+	bne .notFire
+
+	lda .debounce
+	bne .notFire2
+	lda #1
+	sta .debounce
+
+	lda frameScrollY
+	clc
+	adc #1
+	and #7
+	sta frameScrollY
+
+	jmp .notFire2
+
+.notFire
+	lda #0
+	sta .debounce
+
+.notFire2
+
+	lda frameScrollY
+	clc
+	adc #7
+	sta SCREENRAM + (23*40)
+}
+
+	lda frameScrollX
+	sta frameScrollOldX
+	lda frameScrollY
+	sta frameScrollOldY
+
+	; Now do the scroll with what velocity we want
+	; Reset the internal scroll registers
+	lda frameScrollMoveColours
+	beq .normalScroll
+
+!ifdef Scroller_ColourScrollRasterAbortLevelFrame {
+	lda framePauseMoveColours
+	cmp #Scroller_ColourScrollRasterAbortLevelFrame+1
+	bcs .doColourScroll
+}
+
+!ifdef Scroller_ColourScrollRasterAbortLevel {
+	lda VIC2Raster
+	cmp #Scroller_ColourScrollRasterAbortLevel
+	bcc .doColourScroll
+	; DEBUG: Disable the check, always do the colour scroll
+;	jmp .doColourScroll
+
+	; Flag that actually we want to delay the colour scroll by a frame because the frame appears to be severely running out of time
+	inc framePauseMoveColours
+
+	; Debug
+;	inc VIC2BorderColour
+
+	lda #0
+	sta scrollerRealMovementXPixels
+	sta scrollerRealMovementYPixels
+!ifdef Paralax_Enable {
+	sta paralaxScrollXPixels
+	sta paralaxScrollYPixels
+}
+
+	rts
+
+.doColourScroll
+} ;< !ifdef Scroller_ColourScrollRasterAbortLevel
+
+	lda #0
+	sta framePauseMoveColours
+
+	; Use whatever values were calculated the previous frame
+	lda frameScrollPreCalcX
+	sta frameScrollX
+	lda frameScrollPreCalcY
+	sta frameScrollY
+	lda frameScrollPreCalcXVel
+	sta scrollerRealMovementXPixels
+!ifdef Paralax_Enable {
+	sta paralaxScrollXPixels
+}
+	lda frameScrollPreCalcYVel
+	sta scrollerRealMovementYPixels
+!ifdef Paralax_Enable {
+	sta paralaxScrollYPixels
+}
+
+	; Update the real coordinates
+	jsr ScrollerUpdateRealCoordinates
+
+!if 0 {
+	; Debug profiling raster position for colour scroll trigger
+	ldx $400
+	lda VIC2Raster
+	sta $401,x
+	inc $400
+}
+	rts
+
+framePauseMoveColours !by 0
+
+.normalScroll
+	; Reset the moved velocity here. If it is a colour scroll then we naturally use whatever was cached.
+	lda #0
+	sta scrollerRealMovementXPixels
+	sta scrollerRealMovementYPixels
+!ifdef Paralax_Enable {
+	sta paralaxScrollXPixels
+	sta paralaxScrollYPixels
+}
+	sta frameScrollPreCalcXVel
+	sta frameScrollPreCalcYVel
+
+!ifdef Scroller_MultiDirectionNoDiagonals {
+	; If diagonals are disabled then pick the largest velocity and use that
+	lda frameTargetVelX
+	bpl .ipo1
+	eor #$FF
+	clc
+	adc #1
+.ipo1
+	sta .sm1+1
+	lda frameTargetVelY
+	bpl .ipo2
+	eor #$FF
+	clc
+	adc #1
+.ipo2
+.sm1	cmp #0
+	bcs .yLarger
+	lda #0
+	sta frameTargetVelY
+	jmp .ipo3
+.yLarger
+	lda #0
+	sta frameTargetVelX
+.ipo3
+}
+
+	jsr ScrollerCheckMapRangeAndVelocity
+
+	ldx #0
+	ldy #0
+	lda frameTargetVelX
+	sta scrollerRealMovementXPixels
+!ifdef Paralax_Enable {
+	sta paralaxScrollXPixels
+}
+	sta frameScrollPreCalcXVel
+	lda frameScrollX
+	clc
+	adc frameTargetVelX
+	sta frameScrollX
+	; Check next frame (colour) to see if this previous frame needs a char scroll
+	clc
+	adc frameTargetVelX
+	bpl .nxs1
+	ldx #-1
+	bne .nxs2
+.nxs1
+	cmp #8
+	bcc .nxs2
+	ldx #1
+.nxs2
+	and #7
+	sta frameScrollPreCalcX
+
+	lda frameTargetVelY
+	sta scrollerRealMovementYPixels
+	sta frameScrollPreCalcYVel
+!ifdef Paralax_Enable {
+	sta paralaxScrollYPixels
+}
+	lda frameScrollY
+	clc
+	adc frameTargetVelY
+	sta frameScrollY
+	; Check next frame (colour) to see if this previous frame needs a char scroll
+	clc
+	adc frameTargetVelY
+	bpl .nys1
+	ldy #-40
+	bne .nys2
+.nys1
+	cmp #8
+	bcc .nys2
+	ldy #40
+.nys2
+	and #7
+	sta frameScrollPreCalcY
+
+	stx frameWantScrX
+	sty frameWantScrY
+
+	lda #0
+	sta frameIsBusyScrolling
+
+	; Is there a char screen scroll due?
+	lda frameWantScrX
+	clc
+	adc frameWantScrY
+	sta frameTotalScrScroll
+	bne .goingToScroll
+	rts
+
+.goingToScroll
+	inc frameIsBusyScrolling
+	; Going to scroll so clamp the fine scrolling values just to make sure.
+	; This doesn't always trigger a clamp but sometimes a sharp change in direction or a weird wrap will cause a clamp.
+	lda frameScrollX
+	bpl .ip1
+	; Moving neg X so calculate
+	lda #0
+	sec
+	sbc frameScrollOldX
+	sta scrollerRealMovementXPixels
+!ifdef Paralax_Enable {
+	sta paralaxScrollXPixels
+}
+	lda #8
+	sec
+	sbc frameScrollPreCalcX
+	sta frameScrollPreCalcXVel
+	lda #0
+	sec
+	sbc frameScrollPreCalcXVel
+	sta frameScrollPreCalcXVel
+	lda #0
+	beq .ip2
+.ip1
+	cmp #8
+	bcc .ip2
+	; Moving pos X so calculate
+	lda #7
+	sec
+	sbc frameScrollOldX
+	sta scrollerRealMovementXPixels
+!ifdef Paralax_Enable {
+	sta paralaxScrollXPixels
+}
+	ldx frameScrollPreCalcX
+	inx
+	stx frameScrollPreCalcXVel
+	lda #7
+.ip2
+	sta frameScrollX
+
+	lda frameScrollY
+	bpl .ip3
+	; Moving neg Y so calculate
+	lda #0
+	sec
+	sbc frameScrollOldY
+	sta scrollerRealMovementYPixels
+!ifdef Paralax_Enable {
+	sta paralaxScrollYPixels
+}
+	lda #8
+	sec
+	sbc frameScrollPreCalcY
+	sta frameScrollPreCalcYVel
+	lda #0
+	sec
+	sbc frameScrollPreCalcYVel
+	sta frameScrollPreCalcYVel
+	lda #0
+	beq .ip4
+.ip3
+	cmp #8
+	bcc .ip4
+	; Moving pos Y so calculate
+	lda #7
+	sec
+	sbc frameScrollOldY
+	sta scrollerRealMovementYPixels
+!ifdef Paralax_Enable {
+	sta paralaxScrollYPixels
+}
+	ldx frameScrollPreCalcY
+	inx
+	stx frameScrollPreCalcYVel
+	lda #7
+.ip4
+	sta frameScrollY
+
+	; Now update the internal block counters
+	lda frameWantScrX
+	bmi .doPosX
+	bne .doNegX
+.xRet
+	lda frameWantScrY
+	bmi .doPosY
+	bne .doNegY
+.yRet
+	rts
+
+.doNegX
+	dec scrollMapLX
+	bpl .xRet
+	dec scrollMapHX
+	jmp .clampLoX
+.doPosX
+	inc scrollMapLX
+	lda scrollMapLX
+	cmp #4
+	bne .xRet
+	inc scrollMapHX
+	; Fall through
+.clampLoX
+	lda scrollMapLX
+	and #3
+	sta scrollMapLX
+	jmp .xRet
+
+.doNegY
+	dec scrollMapLY
+	bpl .yRet
+	dec scrollMapHY
+	jmp .clampLoY
+.doPosY
+	inc scrollMapLY
+	lda scrollMapLY
+	cmp #4
+	bne .yRet
+	inc scrollMapHY
+	; Fall through
+.clampLoY
+	lda scrollMapLY
+	and #3
+	sta scrollMapLY
+	jmp .yRet
+
+
+ScrollerCheckMapRangeAndVelocity
+	; Do map range check before fine scrolling
+	lda scrollMapHX
+	ora scrollMapLX
+	bne .no1
+	lda frameTargetVelX
+	bmi .no1
+	lda #0
+	sta frameTargetVelX
+.no1
+	lda scrollMapHY
+	ora scrollMapLY
+	bne .no2
+	lda frameTargetVelY
+	bmi .no2
+	lda #0
+	sta frameTargetVelY
+.no2
+
+	; Compare for the block map and block column pos to stop scrolling to the right when near the right hand edge
+	lda MapData	; Width
+	sec
+	sbc #10
+	cmp scrollMapHX
+	bne .no3
+	lda scrollMapLX
+	cmp #1
+	bne .no3
+	lda frameTargetVelX
+	bpl .no3
+	lda #0
+	sta frameTargetVelX
+.no3
+	lda MapData+1	; Height
+	sec
+	sbc #6
+	cmp scrollMapHY
+	bne .no4
+	lda scrollMapLY
+!if Scroller_AdditionalCharLines >= 2 {
+	cmp #2
+} else {
+	cmp #3
+}
+	bne .no4
+	lda frameTargetVelY
+	bpl .no4
+	lda #0
+	sta frameTargetVelY
+.no4
+	rts
+}
+
+!zn {
+; To be called after ScrollerCalculate. Can be called even if the screen is being displayed.
+ScrollerScreen
+	lda #0
+	sta frameMovedScreenOrColours
+	; Test to see if we might do a colour scroll this frame and if so then update the displaying screen bank for the IRQ since our colour update is likely to be running by the time the IRQ happens.
+	lda frameScrollMoveColours
+	beq .scrollScreen
+
+JNotWantingScroll
+	jmp NotWantingScroll
+
+.scrollScreen
+
+	lda frameTotalScrScroll
+	beq JNotWantingScroll
+
+!ifdef Scroller_EnableCallbackBeforeCharScreenScroll {
+	jsr Scroller_CallbackBeforeCharScreenScroll
+	lda frameTotalScrScroll
+}
+
+	inc frameIsBusyScrolling
+	inc frameScrollMoveColours
+	inc frameMovedScreenOrColours
+
+
+	cmp #1
+	bne .scrTestNext1
+	ldy topScreenBank
+	bne .wantScr1To0_1
+	jmp ScrollBank0To1_1
+.wantScr1To0_1
+	jmp ScrollBank1To0_1
+.scrTestNext1
+
+	cmp #-1
+	bne .scrTestNext2
+	ldy topScreenBank
+	bne .wantScr1To0_m1
+	jmp ScrollBank0To1_m1
+.wantScr1To0_m1
+	jmp ScrollBank1To0_m1
+.scrTestNext2
+
+	cmp #40
+	bne .scrTestNext3
+	ldy topScreenBank
+	bne .wantScr1To0_40
+	jmp ScrollBank0To1_40
+.wantScr1To0_40
+	jmp ScrollBank1To0_40
+.scrTestNext3
+
+	cmp #-40
+	bne .scrTestNext4
+	ldy topScreenBank
+	bne .wantScr1To0_m40
+	jmp ScrollBank0To1_m40
+.wantScr1To0_m40
+	jmp ScrollBank1To0_m40
+.scrTestNext4
+
+!ifdef Scroller_MultiDirectionNoDiagonals { } else {
+	cmp #39
+	bne .scrTestNext5
+	ldy topScreenBank
+	bne .wantScr1To0_39
+	jmp ScrollBank0To1_39
+.wantScr1To0_39
+	jmp ScrollBank1To0_39
+.scrTestNext5
+
+	cmp #-39
+	bne .scrTestNext6
+	ldy topScreenBank
+	bne .wantScr1To0_m39
+	jmp ScrollBank0To1_m39
+.wantScr1To0_m39
+	jmp ScrollBank1To0_m39
+.scrTestNext6
+
+	cmp #41
+	bne .scrTestNext7
+	ldy topScreenBank
+	bne .wantScr1To0_41
+	jmp ScrollBank0To1_41
+.wantScr1To0_41
+	jmp ScrollBank1To0_41
+.scrTestNext7
+
+	cmp #-41
+	bne .scrTestNext8
+	ldy topScreenBank
+	bne .wantScr1To0_m41
+	jmp ScrollBank0To1_m41
+.wantScr1To0_m41
+	jmp ScrollBank1To0_m41
+.scrTestNext8
+}
+
+NotWantingScroll
+!ifdef Scroller_DebugScreenScrollTimings {
+	lda #VIC2Colour_Black
+	sta VIC2BorderColour
+}
+	rts
+}
+
+!zn {
+; Must be called after ScrollerScreen. Must not be called while the scrolling screen is being displayed.
+.lNotWantingColourScroll jmp NotWantingColourScroll
+ScrollerOffScreen
+	lda framePauseMoveColours
+	beq .doColourScroll
+	rts
+.doColourScroll
+	lda #0
+	sta frameMovedScreenOrColours
+
+	; Now update the colour memory if required by the scroll
+	lda frameScrollMoveColours
+	cmp #2	; Signifies we just did a character scroll
+	bcc .lNotWantingColourScroll
+
+	inc frameIsBusyScrolling
+	inc frameMovedScreenOrColours
+	jsr ScrollerFlipBank
+
+	; Find the correct scroll routine to call
+	lda frameTotalScrScroll
+
+	; Reset what char screen scroll we did
+	ldx #0
+	stx frameTotalScrScroll
+	stx frameScrollMoveColours
+
+	cmp #1
+	bne .colTestNext1z
+	inc ScrollerScreenCharMovedX
+	jmp .colTestNext8z
+.colTestNext1z
+
+	cmp #-1
+	bne .colTestNext2z
+	dec ScrollerScreenCharMovedX
+	jmp .colTestNext8z
+.colTestNext2z
+
+	cmp #40
+	bne .colTestNext3z
+	inc ScrollerScreenCharMovedY
+	jmp .colTestNext8z
+.colTestNext3z
+
+	cmp #-40
+	bne .colTestNext4z
+	dec ScrollerScreenCharMovedY
+	jmp .colTestNext8z
+.colTestNext4z
+
+	cmp #39
+	bne .colTestNext5z
+	dec ScrollerScreenCharMovedX
+	inc ScrollerScreenCharMovedY
+	jmp .colTestNext8z
+.colTestNext5z
+
+	cmp #-39
+	bne .colTestNext6z
+	inc ScrollerScreenCharMovedX
+	dec ScrollerScreenCharMovedY
+	jmp .colTestNext8z
+.colTestNext6z
+
+	cmp #41
+	bne .colTestNext7z
+	inc ScrollerScreenCharMovedX
+	inc ScrollerScreenCharMovedY
+	jmp .colTestNext8z
+.colTestNext7z
+
+	cmp #-41
+	bne .colTestNext8z
+	dec ScrollerScreenCharMovedX
+	dec ScrollerScreenCharMovedY
+.colTestNext8z
+
+
+!ifdef Scroller_NeedFullColourScroll {
+	cmp #1
+	bne .colTestNext1
+	jmp ScrollColour_1
+.colTestNext1
+
+	cmp #-1
+	bne .colTestNext2
+	jmp ScrollColour_m1
+.colTestNext2
+
+	cmp #40
+	bne .colTestNext3
+	jmp ScrollColour_40
+.colTestNext3
+
+	cmp #-40
+	bne .colTestNext4
+	jmp ScrollColour_m40
+.colTestNext4
+
+!ifdef Scroller_MultiDirectionNoDiagonals { } else {
+	cmp #39
+	bne .colTestNext5
+	jmp ScrollColour_39
+.colTestNext5
+
+	cmp #-39
+	bne .colTestNext6
+	jmp ScrollColour_m39
+.colTestNext6
+
+	cmp #41
+	bne .colTestNext7
+	jmp ScrollColour_41
+.colTestNext7
+
+	cmp #-41
+	bne .colTestNext8
+	jmp ScrollColour_m41
+.colTestNext8
+};<< !ifdef Scroller_MultiDirectionNoDiagonals { } else {
+
+} else { ;<< else !ifdef Scroller_NeedFullColourScroll
+
+	cmp #1
+	bne .scrTestNext1
+	ldy topScreenBank
+	beq .wantScr1To0_1
+	jmp ScrollBank0To1_1b
+.wantScr1To0_1
+	jmp ScrollBank1To0_1b
+.scrTestNext1
+
+	cmp #-1
+	bne .scrTestNext2
+	ldy topScreenBank
+	beq .wantScr1To0_m1
+	jmp ScrollBank0To1_m1b
+.wantScr1To0_m1
+	jmp ScrollBank1To0_m1b
+.scrTestNext2
+
+	cmp #40
+	bne .scrTestNext3
+	ldy topScreenBank
+	beq .wantScr1To0_40
+	jmp ScrollBank0To1_40b
+.wantScr1To0_40
+	jmp ScrollBank1To0_40b
+.scrTestNext3
+
+	cmp #-40
+	bne .scrTestNext4
+	ldy topScreenBank
+	beq .wantScr1To0_m40
+	jmp ScrollBank0To1_m40b
+.wantScr1To0_m40
+	jmp ScrollBank1To0_m40b
+.scrTestNext4
+
+!ifdef Scroller_MultiDirectionNoDiagonals { } else {
+	cmp #39
+	bne .scrTestNext5
+	ldy topScreenBank
+	beq .wantScr1To0_39
+	jmp ScrollBank0To1_39b
+.wantScr1To0_39
+	jmp ScrollBank1To0_39b
+.scrTestNext5
+
+	cmp #-39
+	bne .scrTestNext6
+	ldy topScreenBank
+	beq .wantScr1To0_m39
+	jmp ScrollBank0To1_m39b
+.wantScr1To0_m39
+	jmp ScrollBank1To0_m39b
+.scrTestNext6
+
+	cmp #41
+	bne .scrTestNext7
+	ldy topScreenBank
+	beq .wantScr1To0_41
+	jmp ScrollBank0To1_41b
+.wantScr1To0_41
+	jmp ScrollBank1To0_41b
+.scrTestNext7
+
+	cmp #-41
+	bne .scrTestNext8
+	ldy topScreenBank
+	beq .wantScr1To0_m41
+	jmp ScrollBank0To1_m41b
+.wantScr1To0_m41
+	jmp ScrollBank1To0_m41b
+.scrTestNext8
+};<< !ifdef Scroller_MultiDirectionNoDiagonals { } else {
+
+
+};<< end !ifdef Scroller_NeedFullColourScroll
+
+
+NotWantingColourScroll
+!ifdef Scroller_DebugColourScrollTimings {
+	lda #VIC2Colour_Black
+	sta VIC2BorderColour
+}
+!ifdef Scroller_DebugScreenScrollTimings {
+!ifdef Scroller_NeedFullColourScroll { } else {
+	lda #VIC2Colour_Black
+	sta VIC2BorderColour
+}
+}
+	lda frameScrollMoveColours
+	beq .s1
+	cmp #1
+	bne .s1
+	inc frameScrollMoveColours
+	inc frameIsBusyScrolling
+.s1
+	rts
+}
+
+
+!zn
+MapTabL
+!fill 256
+MapTabH
+!fill 256
+
+
+
+
+
+
+!macro MACRODrawBlock .scrHighAddr , .theBlockTabL , .theBlockTabH {
+	sta mainAStore
+	stx mainXStore
+	sty mainYStore
+	tya
+	asl
+	asl
+	tay
+	lda ScreenTabL,y
+	sta tempWork0
+	clc
+	txa
+	asl
+	asl
+	adc tempWork0
+	sta tempWork0
+	lda ScreenTabH,y
+	adc #.scrHighAddr
+	sta tempWork1
+
+	ldx mainAStore
+	lda .theBlockTabL,x
+	sta tempWork2
+	lda .theBlockTabH,x
+	sta tempWork3
+	ldy #0
+
+	lda (tempWork2),y
+	sta (tempWork0),y
+	iny
+	lda (tempWork2),y
+	sta (tempWork0),y
+	iny
+	lda (tempWork2),y
+	sta (tempWork0),y
+	iny
+	lda (tempWork2),y
+	sta (tempWork0),y
+	iny
+	lda tempWork0
+	clc
+	adc #36
+	sta tempWork0
+	bcc .over3
+	inc tempWork1
+.over3
+
+	lda (tempWork2),y
+	sta (tempWork0),y
+	iny
+	lda (tempWork2),y
+	sta (tempWork0),y
+	iny
+	lda (tempWork2),y
+	sta (tempWork0),y
+	iny
+	lda (tempWork2),y
+	sta (tempWork0),y
+	iny
+	lda tempWork0
+	clc
+	adc #36
+	sta tempWork0
+	bcc .over4
+	inc tempWork1
+.over4
+
+	lda (tempWork2),y
+	sta (tempWork0),y
+	iny
+	lda (tempWork2),y
+	sta (tempWork0),y
+	iny
+	lda (tempWork2),y
+	sta (tempWork0),y
+	iny
+	lda (tempWork2),y
+	sta (tempWork0),y
+	iny
+	lda tempWork0
+	clc
+	adc #36
+	sta tempWork0
+	bcc .over5
+	inc tempWork1
+.over5
+
+	lda (tempWork2),y
+	sta (tempWork0),y
+	iny
+	lda (tempWork2),y
+	sta (tempWork0),y
+	iny
+	lda (tempWork2),y
+	sta (tempWork0),y
+	iny
+	lda (tempWork2),y
+	sta (tempWork0),y
+
+	lda mainAStore
+	ldx mainXStore
+	ldy mainYStore
+	rts
+}
+
+!macro MACROColouriseBlock .scrHighAddr {
+	sta mainAStore
+	stx mainXStore
+	sty mainYStore
+	tya
+	asl
+	asl
+	tay
+	lda ScreenTabL,y
+	sta tempWork0
+	clc
+	txa
+	asl
+	asl
+	adc tempWork0
+	sta tempWork0
+	sta tempWork2
+	lda ScreenTabH,y
+	sta tempWork3
+	adc #.scrHighAddr
+	sta tempWork1
+	adc #(>COLOURRAM)-.scrHighAddr
+	sta tempWork3
+
+	clc
+	ldy #0
+
+	lda (tempWork0),y
+	tax
+	lda CharColours,x
+	sta (tempWork2),y
+	iny
+	lda (tempWork0),y
+	tax
+	lda CharColours,x
+	sta (tempWork2),y
+	iny
+	lda (tempWork0),y
+	tax
+	lda CharColours,x
+	sta (tempWork2),y
+	iny
+	lda (tempWork0),y
+	tax
+	lda CharColours,x
+	sta (tempWork2),y
+	tya
+	adc #37
+	tay
+
+	lda (tempWork0),y
+	tax
+	lda CharColours,x
+	sta (tempWork2),y
+	iny
+	lda (tempWork0),y
+	tax
+	lda CharColours,x
+	sta (tempWork2),y
+	iny
+	lda (tempWork0),y
+	tax
+	lda CharColours,x
+	sta (tempWork2),y
+	iny
+	lda (tempWork0),y
+	tax
+	lda CharColours,x
+	sta (tempWork2),y
+	tya
+	adc #37
+	tay
+
+	lda (tempWork0),y
+	tax
+	lda CharColours,x
+	sta (tempWork2),y
+	iny
+	lda (tempWork0),y
+	tax
+	lda CharColours,x
+	sta (tempWork2),y
+	iny
+	lda (tempWork0),y
+	tax
+	lda CharColours,x
+	sta (tempWork2),y
+	iny
+	lda (tempWork0),y
+	tax
+	lda CharColours,x
+	sta (tempWork2),y
+	tya
+	adc #37
+	tay
+
+	lda (tempWork0),y
+	tax
+	lda CharColours,x
+	sta (tempWork2),y
+	iny
+	lda (tempWork0),y
+	tax
+	lda CharColours,x
+	sta (tempWork2),y
+	iny
+	lda (tempWork0),y
+	tax
+	lda CharColours,x
+	sta (tempWork2),y
+	iny
+	lda (tempWork0),y
+	tax
+	lda CharColours,x
+	sta (tempWork2),y
+
+	lda mainAStore
+	ldx mainXStore
+	ldy mainYStore
+	rts
+}
+
+!macro MACRODrawBlockLine .scrHighAddr , .theBlockTabL , .theBlockTabH {
+	sta mainAStore
+	stx mainXStore
+	sty mainYStore
+	tya
+	asl
+	asl
+	tay
+	lda ScreenTabL,y
+	sta tempWork0
+	clc
+	txa
+	asl
+	asl
+	adc tempWork0
+	sta tempWork0
+	lda ScreenTabH,y
+	adc #.scrHighAddr
+	sta tempWork1
+
+	ldx mainAStore
+	lda .theBlockTabL,x
+	sta tempWork2
+	lda .theBlockTabH,x
+	sta tempWork3
+
+	ldy #0
+!for .i , 4 {
+	lda (tempWork2),y
+	sta (tempWork0),y
+	iny
+}
+
+!if Scroller_AdditionalCharLines > 1 {
+	lda tempWork2
+	clc
+	adc #4
+	sta tempWork2
+	lda tempWork3
+	adc #0
+	sta tempWork3
+
+	lda tempWork0
+	clc
+	adc #40
+	sta tempWork0
+	lda tempWork1
+	adc #0
+	sta tempWork1
+
+	ldy #0
+!for .i , 4 {
+	lda (tempWork2),y
+	sta (tempWork0),y
+	iny
+}
+}
+
+	lda mainAStore
+	ldx mainXStore
+	ldy mainYStore
+	rts
+}
+
+!macro MACROColouriseBlockLine .scrHighAddr {
+	sta mainAStore
+	stx mainXStore
+	sty mainYStore
+	tya
+	asl
+	asl
+	tay
+	lda ScreenTabL,y
+	sta tempWork0
+	clc
+	txa
+	asl
+	asl
+	adc tempWork0
+	sta tempWork0
+	sta tempWork2
+	lda ScreenTabH,y
+	sta tempWork3
+	adc #.scrHighAddr
+	sta tempWork1
+	adc #(>COLOURRAM)-.scrHighAddr
+	sta tempWork3
+
+	clc
+	ldy #0
+!for .i , 4 {
+	lda (tempWork0),y
+	tax
+	lda CharColours,x
+	sta (tempWork2),y
+	iny
+}
+
+!if Scroller_AdditionalCharLines > 1 {
+	ldy #40
+!for .i , 4 {
+	lda (tempWork0),y
+	tax
+	lda CharColours,x
+	sta (tempWork2),y
+	iny
+}
+}
+
+	lda mainAStore
+	ldx mainXStore
+	ldy mainYStore
+	rts
+}
+
+!macro MACRODrawBlockColourLine {
+	sta mainAStore
+	stx mainXStore
+	sty mainYStore
+	tya
+	asl
+	asl
+	tay
+	lda ScreenTabL,y
+	sta tempWork0
+	clc
+	txa
+	asl
+	asl
+	adc tempWork0
+	sta tempWork0
+	lda ScreenTabH,y
+	adc #>COLOURRAM
+	sta tempWork1
+
+	ldx mainAStore
+	lda BlockColours,x
+	tax
+
+	ldy #0
+	sta (tempWork0),y
+	iny
+	sta (tempWork0),y
+	iny
+	sta (tempWork0),y
+	iny
+	sta (tempWork0),y
+
+!if Scroller_AdditionalCharLines > 1 {
+	ldy #40
+	sta (tempWork0),y
+	iny
+	sta (tempWork0),y
+	iny
+	sta (tempWork0),y
+	iny
+	sta (tempWork0),y
+}
+
+	lda mainAStore
+	ldx mainXStore
+	ldy mainYStore
+	rts
+}
+
+!zn
+DrawBlock
+	+MACRODrawBlock $c8 , BlockTabL , BlockTabH
+
+
+!ifdef Scroller_FullScreen {
+!zn
+DrawBlockLine
+	+MACRODrawBlockLine $c8 , BlockTabL , BlockTabH
+}
+!if Scroller_AdditionalCharLines > 0 {
+!zn
+DrawBlockLine
+	+MACRODrawBlockLine $c8 , BlockTabL , BlockTabH
+}
+
+!zn
+DrawBlockColour
+!ifdef Scroller_NeedFullColourScroll {
+!ifdef CharColoursForEveryCharacter {
+	+MACROColouriseBlock $c8
+} else {
+!ifdef BlockColoursForEveryCharacter {
+	+MACRODrawBlock >COLOURRAM , BlockColTabL , BlockColTabH
+} else {
+	sta mainAStore
+	stx mainXStore
+	sty mainYStore
+	tya
+	asl
+	asl
+	tay
+	lda ScreenTabL,y
+	sta tempWork0
+	clc
+	txa
+	asl
+	asl
+	adc tempWork0
+	sta tempWork0
+	lda ScreenTabH,y
+	adc #>COLOURRAM
+	sta tempWork1
+
+	ldx mainAStore
+	lda BlockColours,x
+	tax
+	ldy #0
+
+	sta (tempWork0),y
+	iny
+	sta (tempWork0),y
+	iny
+	sta (tempWork0),y
+	iny
+	sta (tempWork0),y
+	tya
+	clc
+	adc #37
+	tay
+	txa
+
+	sta (tempWork0),y
+	iny
+	sta (tempWork0),y
+	iny
+	sta (tempWork0),y
+	iny
+	sta (tempWork0),y
+	tya
+	clc
+	adc #37
+	tay
+	txa
+
+	sta (tempWork0),y
+	iny
+	sta (tempWork0),y
+	iny
+	sta (tempWork0),y
+	iny
+	sta (tempWork0),y
+	tya
+	clc
+	adc #37
+	tay
+	txa
+
+	sta (tempWork0),y
+	iny
+	sta (tempWork0),y
+	iny
+	sta (tempWork0),y
+	iny
+	sta (tempWork0),y
+
+	lda mainAStore
+	ldx mainXStore
+	ldy mainYStore
+	rts
+}
+}
+} else {
+	rts
+} ;< !ifdef Scroller_NeedFullColourScroll
+
+
+!ifdef Scroller_FullScreen {
+Scroller_AddColourLine = 1
+}
+!if Scroller_AdditionalCharLines > 0 {
+Scroller_AddColourLine = 1
+}
+
+!ifdef Scroller_AddColourLine {
+!zn
+DrawBlockColourLine
+!ifdef Scroller_NeedFullColourScroll {
+!ifdef CharColoursForEveryCharacter {
+	+MACROColouriseBlockLine $c8
+} else {
+!ifdef BlockColoursForEveryCharacter {
+	+MACRODrawBlockLine >COLOURRAM , BlockColTabL , BlockColTabH
+} else {
+	+MACRODrawBlockColourLine
+}
+}
+} else {
+	rts
+} ;< !ifdef Scroller_NeedFullColourScroll
+}
+
+!zn
+GetMapBlock
+	stx mainXStore
+	sty mainYStore
+	tya
+	clc
+	adc scrollMapHY
+	tay
+	lda MapTabL,y
+	sta .sm1+1
+	lda MapTabH,y
+	sta .sm1+2
+	txa
+	clc
+	adc scrollMapHX
+	tax
+.sm1	lda $ffff,x
+	ldx mainXStore
+	ldy mainYStore
+	rts
+
+!zn
+; Draws the initial map from the coords setup
+DrawMap
+	ldy #0
+.l1
+	ldx #0
+.l2
+	jsr GetMapBlock
+	jsr DrawBlock
+	jsr DrawBlockColour
+	inx
+	cpx #10
+	bne .l2
+	iny
+	ldx #0
+!ifdef Scroller_FullScreen {
+	cpy #6
+} else {
+	cpy #5
+}
+	bne .l1
+
+!ifdef Scroller_FullScreen {
+	ldx #0
+.l3
+	jsr GetMapBlock
+	jsr DrawBlockLine
+	jsr DrawBlockColourLine
+	inx
+	cpx #10
+	bne .l3
+}
+!if Scroller_AdditionalCharLines > 0 {
+	ldx #0
+.l3
+	jsr GetMapBlock
+	jsr DrawBlockLine
+	jsr DrawBlockColourLine
+	inx
+	cpx #10
+	bne .l3
+}
+
+!ifdef IRQOpenBorders {
+	jsr ScrollerOpenBorderCopyBank0
+}
+
+	lda #0
+	; MPi: TODO: Maybe draw the map to the back buffer then swap it rather than assuming one
+	; static screen bank?
+	jsr ScrollerSetBank
+	rts
+
+ScreenScrollerCodeStart = *
+!ifdef Scroller_NeedFullColourScroll {
+!source "Scrollers.a"
+} else {
+!source "ScrollersNoColour.a"
+}
+ScreenScrollerCodeEnd = *
+ScreenScrollerCodeSize = ScreenScrollerCodeEnd - ScreenScrollerCodeStart
+
+ScrollerStripsCodeStart = *
+!source "ScrollerStripsMacros.a"
+!source "ScrollerStripsCommon.a"
+
+
+!ifndef Scroller_EnableBlockStripsSpeedCodeInCart {
+!source "ScrollerStripsTop.a"
+!source "ScrollerStripsBottom.a"
+!source "ScrollerStripsLeft.a"
+!source "ScrollerStripsRight.a"
+} else {
+
+!source "bin/StripOffsets.a"
+
+!ifndef kCartOffset_ScrollerDrawStripTopBank1 {
+!warn "re-assemble"
+kCartOffset_ScrollerDrawStripTopBank1 = 0
+kCartOffset_ScrollerDrawStripTopBank0 = 0
+kCartOffset_ScrollerDrawStripRightBank1 = 0
+kCartOffset_ScrollerDrawStripRightBank0 = 0
+kCartOffset_ScrollerDrawStripLeftBank1 = 0
+kCartOffset_ScrollerDrawStripLeftBank0 = 0
+kCartOffset_ScrollerDrawStripBottomBank1 = 0
+kCartOffset_ScrollerDrawStripBottomBank0 = 0
+}
+
+
+ScrollerDrawStripTopBank0
+	+Scroller_ScrollExecCartBank CartFile1_Bank_BlockStrips_bin , CartFile1_Start_BlockStrips_bin + kCartOffset_ScrollerDrawStripTopBank0
+	rts
+ScrollerDrawStripTopBank1
+	+Scroller_ScrollExecCartBank CartFile1_Bank_BlockStrips_bin , CartFile1_Start_BlockStrips_bin + kCartOffset_ScrollerDrawStripTopBank1
+	rts
+
+ScrollerDrawStripBottomBank0
+	+Scroller_ScrollExecCartBank CartFile1_Bank_BlockStrips_bin , CartFile1_Start_BlockStrips_bin + kCartOffset_ScrollerDrawStripBottomBank0
+	rts
+ScrollerDrawStripBottomBank1
+	+Scroller_ScrollExecCartBank CartFile1_Bank_BlockStrips_bin , CartFile1_Start_BlockStrips_bin + kCartOffset_ScrollerDrawStripBottomBank1
+	rts
+
+ScrollerDrawStripLeftBank0
+	+Scroller_ScrollExecCartBank CartFile1_Bank_BlockStrips_bin , CartFile1_Start_BlockStrips_bin + kCartOffset_ScrollerDrawStripLeftBank0
+	rts
+ScrollerDrawStripLeftBank1
+	+Scroller_ScrollExecCartBank CartFile1_Bank_BlockStrips_bin , CartFile1_Start_BlockStrips_bin + kCartOffset_ScrollerDrawStripLeftBank1
+	rts
+
+ScrollerDrawStripRightBank0
+	+Scroller_ScrollExecCartBank CartFile1_Bank_BlockStrips_bin , CartFile1_Start_BlockStrips_bin + kCartOffset_ScrollerDrawStripRightBank0
+	rts
+ScrollerDrawStripRightBank1
+	+Scroller_ScrollExecCartBank CartFile1_Bank_BlockStrips_bin , CartFile1_Start_BlockStrips_bin + kCartOffset_ScrollerDrawStripRightBank1
+	rts
+}
+
+!ifndef Scroller_EnableBlockColourSpeedCodeInCart {
+!source "ScrollerStripsColouriseTop.a"
+!source "ScrollerStripsColouriseBottom.a"
+!source "ScrollerStripsColouriseLeft.a"
+!source "ScrollerStripsColouriseRight.a"
+} else {
+
+ScrollerDrawStripTopColour
+	+Scroller_ScrollExecCartBank CartFile1_Bank_ColouriseTop_bin , CartFile1_Start_ColouriseTop_bin
+	rts
+ScrollerDrawStripBottomColour
+	+Scroller_ScrollExecCartBank CartFile1_Bank_ColouriseBottom_bin , CartFile1_Start_ColouriseBottom_bin
+	rts
+ScrollerDrawStripLeftColour
+	+Scroller_ScrollExecCartBank CartFile1_Bank_ColouriseLeft_bin , CartFile1_Start_ColouriseLeft_bin
+	rts
+ScrollerDrawStripRightColour
+	+Scroller_ScrollExecCartBank CartFile1_Bank_ColouriseRight_bin , CartFile1_Start_ColouriseRight_bin
+	rts
+
+}
+
+ScrollerStripsCodeEnd = *
+ScrollerStripsCodeSize = ScrollerStripsCodeEnd - ScrollerStripsCodeStart
+
+!source "ScrollerAnimation.a"
+
+!ifdef Scroller_MultiDirection {
+!ifndef DisableUpdateMultiplexorToAnimation {
+!ifndef DisableUpdateMultiplexorToAnimationCode {
+!zn
+UpdateMultiplexorToAnimation
+	ldx #Multiplex_items
+	jsr Multiplex_Default_Init
+	ldx #Multiplex_items-1
+.l1
+	lda Multiplex_SpriteFrame,x
+	sta AnimationSpriteFrame,x
+
+	lda Multiplex_Colour,x
+	sta AnimationSpriteColour,x
+
+	lda Multiplex_XPosLo,x
+	sta AnimationXPosLo,x
+	lda Multiplex_XPosHi,x
+	sta AnimationXPosHi,x
+	lda Multiplex_YPos,x
+	sta AnimationYPos,x
+!ifdef Scroller_RunJumpDemo {
+	; Create some less tightly packed positions when in this demo mode
+	txa
+	and #1
+	bne .o1
+	lda Multiplex_YPos,x
+	rol
+	sta AnimationYPos,x
+.o1
+	txa
+	and #2
+	bne .o2
+	lda Multiplex_YPos,x
+	rol
+	sta AnimationYPos,x
+.o2
+}
+
+	dex
+	bpl .l1
+!ifdef Scroller_RunJumpDemo {
+	lda #128
+	sta AnimationXPosLo
+	lda #64
+	sta AnimationYPos
+	lda #0
+	sta AnimationXPosHi
+
+	lda #$ff
+	sta VIC2SpriteMulticolour
+	lda #VIC2Colour_DarkGrey
+	sta VIC2ExtraSpriteColour1
+	lda #VIC2Colour_Yellow
+	sta VIC2ExtraSpriteColour2
+
+	lda #VIC2Colour_LightRed
+	sta AnimationSpriteColour+1
+}
+	rts
+
+!source "../SpriteMultiplexor/SpriteMultiplexorDefaultPattern.a"
+} ;< !ifndef DisableUpdateMultiplexorToAnimationCode {
+} ;< !ifndef DisableUpdateMultiplexorToAnimation {
+} ;< !ifdef Scroller_MultiDirection {
+
+
+!source "SpritePosToScreenPosMacros.a"
+
+!ifdef Scroller_RunJumpDemo {
+!source "RunJumpDemo.a"
+}
+
+!ifdef Scroller_DisableUpdateSprites {} else {
+!zn
+UpdateSprites
+!ifdef Scroller_RunJumpDemo {
+	jsr RunJump_UpdateAnimations
+}
+
+	; Update sprites here from the frame data. i.e. Copy them from the frame data to the interrupt data
+	; MPi: TODO: Optimisation. Don't copy the sprite data have double buffered sprite data. One for calc, one for draw.
+
+	jsr Scroller_ScrollSprites
+
+	; MPi: TODO: Here is a good spot to add code that will remove animated sprites that are too far off screen
+
+	; MPi: Enable this code to demonstrate the multiplexor coping with bunches of sprites instead of regularly spaced sprites due to sprites being created depending on the map x pos
+!if 0 {
+	; Expire a variable amount of sprites depending on the map x pos
+	lda scrollMapHX
+	cmp Multiplex_MaxSpr
+	bcc .n1
+	lda Multiplex_MaxSpr
+.n1
+	cmp #4
+	bcs .n2
+	lda #4
+.n2
+	tax
+	inx
+	lda #255
+.sp2
+	cpx Multiplex_MaxSpr
+	bcs .sp3
+	sta AnimationYPos,x
+	inx
+	jmp .sp2
+.sp3
+}
+
+!ifndef Scroller_RunJumpDemo {
+!if 1 {
+	; This code cycles sprite frames to test any screen or border split with the full range of sprite frames
+	; It alternates every other sprite to give the empty sprite rejection and sort time to handle the changes
+	ldx Multiplex_MaxSpr
+	dex
+	inc .smAlternate+1
+.smAlternate lda #0
+	and #1
+	bne .sp4
+	dex
+.sp4
+	inc AnimationSpriteFrame,x
+	dex
+	dex
+	bpl .sp4
+}
+}
+
+	rts
+
+!source "ScrollerScrollSprites.a"
+} ;< !ifdef Scroller_DisableUpdateSprites {} else {
+
+
+
+!ifdef RedirectHandleUserInput { } else {
+
+!zn
+HandleUserInput
+	jsr HandleJoystick
+	rts
+
+!zn
+.toggle !by 0
+HandleJoystick
+	inc .toggle
+	lda .toggle
+	cmp #3
+	beq .runMe
+	rts
+.runMe
+	lda #0
+	sta .toggle
+	; Update the velocity at which we want to travel
+	lda #%0100
+	bit CIA1KeyboardColumnJoystickA
+	bne .o1
+	inc frameTargetVelX
+.o1
+	lda #%1000
+	bit CIA1KeyboardColumnJoystickA
+	bne .o2
+	dec frameTargetVelX
+.o2
+	lda #%0001
+	bit CIA1KeyboardColumnJoystickA
+	bne .o3
+	inc frameTargetVelY
+.o3
+	lda #%0010
+	bit CIA1KeyboardColumnJoystickA
+	bne .o4
+	dec frameTargetVelY
+.o4
+	lda #%10000
+	bit CIA1KeyboardColumnJoystickA
+	bne .o5
+	lda #0
+	sta frameTargetVelY
+	sta frameTargetVelX
+.o5
+
+	!source "ClampScrollVelocity.a"
+
+	rts
+} ;<!ifdef RedirectHandleUserInput { } else {
