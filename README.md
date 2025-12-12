@@ -1,5 +1,4 @@
-Welcome to the generic scrolling game 
-engine source code for 
+This is the complete project for the Commodore 64 game
 
 RIVER BARRAGE
 
