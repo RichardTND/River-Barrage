@@ -12,9 +12,8 @@ Download source from the github link.
 https://github.com/martinpiper/C64Public 
 (Download zip) 
 
-Unzip it somewhere.
-
-Then copy the RIVER BARRAGE project 
+Unzip it onto your storage device
+then copy the RIVER BARRAGE project 
 as a new project inside the C64Public 
 directory.
 
