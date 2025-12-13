@@ -6,7 +6,7 @@ REM These can be found at https://github.com/martinpiper/c64public
 @echo off
 SETLOCAL
 del Scroller.prg Scroller.map
-
+del *.prg
 rem Usually pass in a parameter for the build customisation you want to use
 rem IF [%1] == [] SET CHOICE=ScrollEntry_MultiDirection.a
 IF [%1] == [] SET CHOICE=ScrollEntry_SEUCK.a
@@ -26,9 +26,15 @@ copy /y Scroller.prg ScrollerOrig.prg
 rem CRUNCH THE GAME (USING $0400 AS JUMP ADDRESS)
 ..\bin\LZMPi.exe -c64bu ScrollerOrig.prg RiverBarrage.prg 1024 >t.txt
 
+rem Link the picture intro to the game
+c:\c64\tools\acme\acme.exe PictureLinker.asm
+
+rem CRUNCH THE LINKED PICTURE (I'm using TSCrunch for this part)
+c:\c64\tools\tscrunch\tscrunch.exe -x2 $080D RBPiclinker.prg RiverBarrage+Pic.prg
+
 
 rem SETUP PATH AND RUN CRUNCHED GAME IN VICE
-c:\c64\tools\vice\x64sc.exe RiverBarrage.prg
+c:\c64\tools\vice\x64sc.exe RiverBarrage+Pic.prg
 goto end
 :error
 echo Scroller.prg not created!

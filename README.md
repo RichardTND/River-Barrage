@@ -1,5 +1,5 @@
-This is the complete project for the Commodore 64 game
-
+Welcome to the generic scrolling game 
+engine source code for 
 RIVER BARRAGE
 
 This project will require the entire 
@@ -11,8 +11,9 @@ Download source from the github link.
 https://github.com/martinpiper/C64Public 
 (Download zip) 
 
-Unzip it onto your storage device
-then copy the RIVER BARRAGE project 
+Unzip it somewhere.
+
+Then copy the RIVER BARRAGE project 
 as a new project inside the C64Public 
 directory.
 
@@ -54,6 +55,21 @@ ripple effect of the water)
 .. and possibly a few other things not 
 mentioned.
 
+EXTRAS
+
+This project also consists of a 
+picture linker intro in which displays
+a loading bitmap and plays the 
+loading music.
+
+The release folder consists of both 
+D64 and tape version of the finished 
+game. The tape version was remastered
+using Tape Master Pro V5.0, which can 
+be found at:
+
+https://richard-tnd.itch.io/tape-master-pro
+
 All C64 files can be found inside the 
 C64 folder. All work files can be 
 loaded into Charpad V2.7.6, Spritepad
@@ -67,26 +83,5 @@ really can be pushed to its limit if
 using this source the correct way.	
 	
 Have fun.
-
-Credits:
-
-Game design, graphics and sound effects
-by 
-
-Alf Yngve 
-
-Front end code, additional enhancements
-and music by
-
-Richard Bayliss
-
-SEUCK Redux framework by 
-
-Martin Piper
-
-For the finished game, please check 
-out:
-
-https://tnd64.unikat.sk/r.html#RiverBarrage
 
 - Richard/TND
