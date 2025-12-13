@@ -24,7 +24,7 @@ if not exist Scroller.prg goto error
 copy /y Scroller.prg ScrollerOrig.prg
 
 rem CRUNCH THE GAME (USING $0400 AS JUMP ADDRESS)
-..\bin\LZMPi.exe -c64b ScrollerOrig.prg RiverBarrage.prg 1024 >t.txt
+..\bin\LZMPi.exe -c64bu ScrollerOrig.prg RiverBarrage.prg 1024 >t.txt
 
 
 rem SETUP PATH AND RUN CRUNCHED GAME IN VICE
