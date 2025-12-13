@@ -1,5 +1,4 @@
-Welcome to the generic scrolling game 
-engine source code for 
+This is the complete project for the Commodore 64 game
 
 RIVER BARRAGE
 
@@ -12,9 +11,8 @@ Download source from the github link.
 https://github.com/martinpiper/C64Public 
 (Download zip) 
 
-Unzip it somewhere.
-
-Then copy the RIVER BARRAGE project 
+Unzip it onto your storage device
+then copy the RIVER BARRAGE project 
 as a new project inside the C64Public 
 directory.
 
