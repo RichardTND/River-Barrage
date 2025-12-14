@@ -24,13 +24,13 @@ if not exist Scroller.prg goto error
 copy /y Scroller.prg ScrollerOrig.prg
 
 rem CRUNCH THE GAME (USING $0400 AS JUMP ADDRESS)
-..\bin\LZMPi.exe -c64mbu ScrollerOrig.prg RiverBarrage.prg 1024 >t.txt
+..\bin\LZMPi.exe -c64mbu ScrollerOrig.prg RiverBarrage.prg $0400 >t.txt
 
 rem Link the picture intro to the game
 c:\c64\tools\acme\acme.exe PictureLinker.asm
 
-rem CRUNCH THE LINKED PICTURE (I'm using TSCrunch for this part)
-c:\c64\tools\tscrunch\tscrunch.exe -x2 $080D RBPiclinker.prg RiverBarrage+Pic.prg
+rem CRUNCH THE LINKED PICTURE 
+..\bin\LZMPi.exe -pp $37 -c64mbu rbpiclinker.prg RiverBarrage+Pic.prg $080d >output.txt
 
 
 rem SETUP PATH AND RUN CRUNCHED GAME IN VICE

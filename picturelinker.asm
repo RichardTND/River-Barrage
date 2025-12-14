@@ -7,6 +7,8 @@
 colour_data = $4328
 video_data = $3f40
 
+gamestart = $080d ;Jump address to game decruncher
+
 	;Generate picture linker
     !to "rbpiclinker.prg",cbm 
     
@@ -316,8 +318,7 @@ tloop2 lda data,x
        lda #$37
        sta $01
        cli 
-       jsr $a659
-       jmp $a7ae
+	   jmp gamestart
 
 ;Volume fade out byte 
 fadedelay !byte $00
